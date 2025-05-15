@@ -1,0 +1,79 @@
+version: '3.9'
+
+services:
+  genio_redis:
+    container_name: genio_redis
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+
+  now_ingestor:
+    build: ./now_ingestor
+    volumes:
+      - ./shared:/app/shared
+    ports:
+      - "8001:8000"
+    depends_on:
+      - genio_redis
+
+  express_emitter:
+    build: ./express_emitter
+    volumes:
+      - ./shared:/app/shared
+    ports:
+      - "8002:8000"
+    depends_on:
+      - genio_redis
+
+  interpret_service:
+    build: ./interpret_service
+    volumes:
+      - ./shared:/app/shared
+    ports:
+      - "8003:8000"
+    depends_on:
+      - genio_redis
+
+  reflect_service:
+    build: ./reflect_service
+    volumes:
+      - ./shared:/app/shared
+    ports:
+      - "8004:8000"
+    depends_on:
+      - genio_redis
+
+  embed_memory_service:
+    build: ./embed_memory_service
+    volumes:
+      - ./shared:/app/shared
+    ports:
+      - "8005:8000"
+    depends_on:
+      - genio_redis
+
+  replay_memory_service:
+    build: ./replay_memory_service
+    volumes:
+      - ./shared:/app/shared
+      - ./memory_log.jsonl:/app/memory_log.jsonl
+    ports:
+      - "8006:8000"
+    depends_on:
+      - genio_redis
+      - qdrant
+
+  memory_replay_viewer_service:
+    build: ./memory_replay_viewer_service
+    volumes:
+      - ./shared:/app/shared
+    ports:
+      - "8007:8000"
+    depends_on:
+      - genio_redis
+
+  qdrant:
+    image: qdrant/qdrant
+    ports:
+      - "6333:6333"
+
