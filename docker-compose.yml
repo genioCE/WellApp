@@ -31,21 +31,6 @@ services:
     depends_on:
       - genio_redis
 
-  now_file_ingestor:
-    build: ./now_file_ingestor
-    volumes:
-      - ./shared:/app/shared
-    ports:
-      - "8010:8000"
-    environment:
-      - PGHOST=postgres
-      - PGPORT=5432
-      - PGUSER=postgres
-      - PGPASSWORD=postgres
-      - PGDATABASE=genio
-    depends_on:
-      - genio_redis
-
   express_emitter:
     build: ./express_emitter
     volumes:
