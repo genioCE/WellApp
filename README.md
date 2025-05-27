@@ -74,8 +74,9 @@ http://localhost:8007
 | Service                    | Port  | Description |
 |---------------------------|-------|-------------|
 | `now_ingestor`            | 8001  | Accepts signals |
+| `now_file_ingestor`       | 8010  | Ingests text files |
 | `express_emitter`         | 8002  | Broadcasts snapshot |
-| `interpret_service`       | 8003  | Parses tokens and prunes embeddings |
+| `interpret_service`       | 8003  | Parses tokens |
 | `reflect_service`         | 8004  | Runs truth filter |
 | `embed_memory_service`    | 8005  | Logs, DuckDB, Qdrant |
 | `replay_memory_service`   | 8006  | Emits past memory |
