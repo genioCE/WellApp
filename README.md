@@ -8,7 +8,7 @@
 
 - Takes in language (**NOW**)
 - Emits structured snapshots (**EXPRESS**)
-- Parses tokens (**INTERPRET**)
+- Parses tokens and prunes embeddings (**INTERPRET**)
 - Reflects on meaning (**REFLECT**)
 - Anchors truth (**TRUTH**)
 - Stores memory in flat log, SQL (DuckDB), and vector database (Qdrant) (**EMBED**)
@@ -75,7 +75,7 @@ http://localhost:8007
 |---------------------------|-------|-------------|
 | `now_ingestor`            | 8001  | Accepts signals |
 | `express_emitter`         | 8002  | Broadcasts snapshot |
-| `interpret_service`       | 8003  | Parses tokens |
+| `interpret_service`       | 8003  | Parses tokens and prunes embeddings |
 | `reflect_service`         | 8004  | Runs truth filter |
 | `embed_memory_service`    | 8005  | Logs, DuckDB, Qdrant |
 | `replay_memory_service`   | 8006  | Emits past memory |

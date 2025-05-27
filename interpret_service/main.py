@@ -1,9 +1,14 @@
-from fastapi import FastAPI
-from shared.redis_utils import subscribe, publish  # <— ADD THIS
+from fastapi import FastAPI, HTTPException
+from shared.redis_utils import subscribe, publish
 from shared.logger import logger
-import threading, json
+import threading
+import json
 import spacy
 import time
+import os
+from datetime import datetime
+from .schemas import PruneRequest, PruneResponse
+from .pruning import prune_embedding
 
 app = FastAPI()
 
@@ -13,6 +18,10 @@ try:
 except Exception as e:
     logger.error(f"Failed to load spaCy model: {e}")
     exit(1)
+
+# Settings for semantic pruning
+THRESHOLD = float(os.getenv("PRUNE_THRESHOLD", "0.1"))
+REDUCE_DIM = int(os.getenv("REDUCE_DIM", "0"))
 
 def listener():
     pubsub = subscribe("express_channel")
@@ -32,5 +41,26 @@ threading.Thread(target=listener, daemon=True).start()
 def healthcheck():
     return {"status": "interpret_service active"}
 
-while True:
-    time.sleep(60)
+
+@app.post("/prune", response_model=PruneResponse)
+async def prune(req: PruneRequest):
+    if not req.embedding:
+        raise HTTPException(status_code=400, detail="Embedding vector missing")
+    try:
+        pruned, details = prune_embedding(
+            req.embedding, THRESHOLD, REDUCE_DIM if REDUCE_DIM > 0 else None
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to prune embedding: {e}")
+
+    return PruneResponse(
+        uuid=req.uuid,
+        pruned_embedding=pruned,
+        timestamp=datetime.utcnow(),
+        details=details,
+    )
+
+import uvicorn
+
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="0.0.0.0", port=8000)
