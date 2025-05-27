@@ -1,7 +1,5 @@
 fastapi
-redis
 pydantic
 uvicorn
-duckdb
+asyncpg
 qdrant-client
-sentence-transformers
