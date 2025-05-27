@@ -1,5 +1,4 @@
- 
-fastapi
-uvicorn
-pydantic
+redis[asyncio]
 sentence-transformers
+fastapi
+uvicorn[standard]

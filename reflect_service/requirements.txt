@@ -1,5 +1,4 @@
- 
-fastapi
-pydantic
+redis
 numpy
-uvicorn
+fastapi
+uvicorn[standard]

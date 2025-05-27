@@ -4,13 +4,12 @@ from shared.logger import logger
 import threading
 import json
 import spacy
-import time
 import os
 from datetime import datetime
-from .schemas import PruneRequest, PruneResponse
-from .pruning import prune_embedding
+from schemas import PruneRequest, PruneResponse
+from pruning import prune_embedding
 
-app = FastAPI()
+app = FastAPI(title="Genio INTERPRET Service")
 
 # Load spaCy model safely
 try:
@@ -25,22 +24,53 @@ REDUCE_DIM = int(os.getenv("REDUCE_DIM", "0"))
 
 def listener():
     pubsub = subscribe("express_channel")
+    logger.info("[INTERPRET] Subscribed to 'express_channel'")
+
     for message in pubsub.listen():
         if message["type"] == "message":
-            data = json.loads(message["data"])
-            doc = nlp(data["content"])
-            tokens = [token.text for token in doc if not token.is_stop]
-            logger.info(f"[INTERPRET] Parsed Tokens: {tokens}")
-            data["tokens"] = tokens  # <— CRITICAL LINE
-            publish("interpret_channel", data)  # <— ADD THIS
+            try:
+                data = json.loads(message["data"])
+                content = data.get("content")
+                embedding = data.get("embedding")
+                uuid = data.get("uuid", datetime.utcnow().isoformat())
 
-# Launch background listener
+                if not embedding:
+                    logger.error(f"[INTERPRET] Missing embedding for uuid={uuid}")
+                    continue
+
+                # Tokenize content
+                doc = nlp(content)
+                tokens = [token.text for token in doc if not token.is_stop]
+                logger.info(f"[INTERPRET] Parsed Tokens: {tokens}")
+
+                # Prune embedding
+                pruned_embedding, details = prune_embedding(
+                    embedding, THRESHOLD, REDUCE_DIM if REDUCE_DIM > 0 else None
+                )
+                logger.info(f"[INTERPRET] Pruned embedding uuid={uuid}, details={details}")
+
+                # Build message for downstream service
+                downstream_message = {
+                    "uuid": uuid,
+                    "tokens": tokens,
+                    "pruned_embedding": pruned_embedding,
+                    "pruning_details": details,
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+
+                # Publish clearly to the next channel
+                publish("interpret_channel", downstream_message)
+                logger.info(f"[INTERPRET] Published processed data uuid={uuid} to 'interpret_channel'")
+
+            except Exception as e:
+                logger.error(f"[INTERPRET] Error processing message: {e}")
+
+# Start listener thread
 threading.Thread(target=listener, daemon=True).start()
 
 @app.get("/")
 def healthcheck():
     return {"status": "interpret_service active"}
-
 
 @app.post("/prune", response_model=PruneResponse)
 async def prune(req: PruneRequest):

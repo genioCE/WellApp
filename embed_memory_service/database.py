@@ -6,13 +6,16 @@ from typing import List, Dict, Any
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import PointStruct, VectorParams, Distance
 import logging
+import uuid
 
 logger = logging.getLogger("genio.embed.database")
 
-DATABASE_URL = os.getenv("POSTGRES_URL", "postgresql://postgres:postgres@postgres:5432/genio")
+
+DATABASE_URL = f"postgresql://{os.getenv('PGUSER')}:{os.getenv('PGPASSWORD')}@{os.getenv('PGHOST')}:{os.getenv('PGPORT')}/{os.getenv('PGDATABASE')}"
 QDRANT_HOST = os.getenv("QDRANT_HOST", "qdrant")
 QDRANT_PORT = int(os.getenv("QDRANT_PORT", 6333))
 COLLECTION_NAME = os.getenv("QDRANT_COLLECTION", "genio_embeddings")
+TARGET_EMBEDDING_DIM = 384
 
 class Database:
     def __init__(self) -> None:
@@ -48,27 +51,42 @@ class Database:
             )
         self.collection_initialized = True
 
+
     async def store_embedding(
-        self, uuid: str, vector: List[float], metadata: Dict[str, Any], timestamp
+        self, uuid_str: str, vector: List[float], metadata: Dict[str, Any], timestamp
     ) -> int:
         assert self.pg_pool is not None
         assert self.qdrant is not None
-        await self.ensure_collection(len(vector))
+
+        # Explicit padding to fixed dimension
+        if len(vector) < TARGET_EMBEDDING_DIM:
+            vector += [0.0] * (TARGET_EMBEDDING_DIM - len(vector))
+        elif len(vector) > TARGET_EMBEDDING_DIM:
+            vector = vector[:TARGET_EMBEDDING_DIM]
+
+        await self.ensure_collection(TARGET_EMBEDDING_DIM)
+
         async with self.pg_pool.acquire() as conn:
             row = await conn.fetchrow(
                 "INSERT INTO embeddings(uuid, timestamp, metadata) VALUES($1,$2,$3) RETURNING id",
-                uuid,
+                uuid_str,
                 timestamp,
                 json.dumps(metadata),
             )
         metadata_id = row["id"]
+
+        # Validate UUID explicitly
+        try:
+            valid_uuid = str(uuid.UUID(uuid_str))
+        except ValueError:
+            valid_uuid = str(uuid.uuid4())
 
         payload = {"metadata_id": metadata_id, **metadata}
 
         def upsert():
             self.qdrant.upsert(
                 collection_name=COLLECTION_NAME,
-                points=[PointStruct(id=uuid, vector=vector, payload=payload)],
+                points=[PointStruct(id=valid_uuid, vector=vector, payload=payload)],
             )
 
         await asyncio.to_thread(upsert)
