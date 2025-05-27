@@ -13,6 +13,12 @@ services:
       - ./shared:/app/shared
     ports:
       - "8001:8000"
+    environment:
+      - PGHOST=postgres
+      - PGPORT=5432
+      - PGUSER=postgres
+      - PGPASSWORD=postgres
+      - PGDATABASE=genio
     depends_on:
       - genio_redis
 

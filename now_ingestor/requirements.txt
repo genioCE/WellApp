@@ -3,3 +3,5 @@ fastapi
 uvicorn
 redis
 pydantic
+python-multipart
+psycopg2-binary
