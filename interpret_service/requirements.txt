@@ -3,3 +3,5 @@ fastapi
 redis
 pydantic
 spacy
+numpy
+scikit-learn

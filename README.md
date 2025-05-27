@@ -8,7 +8,7 @@
 
 - Takes in language (**NOW**)
 - Emits structured snapshots (**EXPRESS**)
-- Parses tokens (**INTERPRET**)
+- Parses tokens and prunes embeddings (**INTERPRET**)
 - Reflects on meaning (**REFLECT**)
 - Anchors truth (**TRUTH**)
 - Stores memory in flat log, SQL (DuckDB), and vector database (Qdrant) (**EMBED**)
