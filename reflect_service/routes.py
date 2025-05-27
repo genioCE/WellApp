@@ -1,8 +1,8 @@
 from fastapi import APIRouter, HTTPException
 from datetime import datetime
 from shared.logger import logger
-from .schemas import AnchorRequest, AnchorResponse
-from .validation import validate_embedding
+from schemas import AnchorRequest, AnchorResponse
+from validation import validate_embedding
 
 router = APIRouter()
 

@@ -8,13 +8,27 @@ services:
       - "6379:6379"
 
   postgres:
-    image: postgres:15-alpine
+    image: postgres:latest
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: genio
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: database
     ports:
       - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d database"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  qdrant:
+    image: qdrant/qdrant
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
 
   now_ingestor:
     build: ./now_ingestor
@@ -23,13 +37,19 @@ services:
     ports:
       - "8001:8000"
     environment:
-      - PGHOST=postgres
-      - PGPORT=5432
-      - PGUSER=postgres
-      - PGPASSWORD=postgres
-      - PGDATABASE=genio
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: user
+      PGPASSWORD: password
+      PGDATABASE: database
+      REDIS_HOST: genio_redis
+      REDIS_PORT: 6379
     depends_on:
-      - genio_redis
+      genio_redis:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+
 
   express_emitter:
     build: ./express_emitter
@@ -37,8 +57,12 @@ services:
       - ./shared:/app/shared
     ports:
       - "8002:8000"
+    environment:
+      REDIS_HOST: genio_redis
+      REDIS_PORT: 6379
     depends_on:
-      - genio_redis
+      genio_redis:
+        condition: service_started
 
   interpret_service:
     build: ./interpret_service
@@ -46,9 +70,12 @@ services:
       - ./shared:/app/shared
     ports:
       - "8003:8000"
+    environment:
+      REDIS_HOST: genio_redis
+      REDIS_PORT: 6379
     depends_on:
-      - genio_redis
-
+      genio_redis:
+        condition: service_started
 
   reflect_service:
     build: ./reflect_service
@@ -56,8 +83,26 @@ services:
       - ./shared:/app/shared
     ports:
       - "8004:8000"
+    environment:
+      REDIS_HOST: genio_redis
+      REDIS_PORT: 6379
     depends_on:
-      - genio_redis
+      genio_redis:
+        condition: service_started
+
+  visualize_service:
+    build: ./visualize_service
+    volumes:
+      - ./shared:/app/shared
+      - ./visualize_service/visualizations:/app/visualizations
+    ports:
+      - "8008:8000"
+    environment:
+      REDIS_HOST: genio_redis
+      REDIS_PORT: 6379
+    depends_on:
+      genio_redis:
+        condition: service_started
 
   embed_memory_service:
     build: ./embed_memory_service
@@ -65,10 +110,23 @@ services:
       - ./shared:/app/shared
     ports:
       - "8005:8000"
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: user
+      PGPASSWORD: password
+      PGDATABASE: database
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: 6333
+      REDIS_HOST: genio_redis
+      REDIS_PORT: 6379
     depends_on:
-      - genio_redis
-      - qdrant
-      - postgres
+      genio_redis:
+        condition: service_started
+      qdrant:
+        condition: service_started
+      postgres:
+        condition: service_healthy
 
   replay_memory_service:
     build: ./replay_memory_service
@@ -77,9 +135,16 @@ services:
       - ./memory_log.jsonl:/app/memory_log.jsonl
     ports:
       - "8006:8000"
+    environment:
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: 6333
+      REDIS_HOST: genio_redis
+      REDIS_PORT: 6379
     depends_on:
-      - genio_redis
-      - qdrant
+      genio_redis:
+        condition: service_started
+      qdrant:
+        condition: service_started
 
   memory_replay_viewer_service:
     build: ./memory_replay_viewer_service
@@ -87,19 +152,13 @@ services:
       - ./shared:/app/shared
     ports:
       - "8007:8000"
+    environment:
+      REDIS_HOST: genio_redis
+      REDIS_PORT: 6379
     depends_on:
-      - genio_redis
+      genio_redis:
+        condition: service_started
 
-  visualize_service:
-    build: ./visualize_service
-    volumes:
-      - ./shared:/app/shared
-    ports:
-      - "8008:8000"
-    depends_on:
-      - genio_redis
-
-  qdrant:
-    image: qdrant/qdrant
-    ports:
-      - "6333:6333"
+volumes:
+  postgres_data:
+  qdrant_data:

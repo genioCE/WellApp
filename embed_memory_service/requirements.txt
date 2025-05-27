@@ -1,5 +1,6 @@
-fastapi
-pydantic
-uvicorn
+redis
 asyncpg
 qdrant-client
+numpy
+fastapi
+uvicorn[standard]

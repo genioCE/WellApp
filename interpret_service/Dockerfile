@@ -1,19 +1,18 @@
-FROM python:3.10-slim
+FROM python:3.11-slim
 
-# Set environment and working directory
+WORKDIR /app
+ENV PYTHONPATH=/app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y build-essential curl
+RUN apt-get update && apt-get install -y build-essential curl \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install Python packages
-COPY requirements.txt .
-RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt && python -m spacy download en_core_web_sm
+COPY requirements.txt /app/
+RUN pip install --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt \
+    && python -m spacy download en_core_web_sm
 
-# Copy app code
-COPY . .
+COPY . /app/
 
-# Use uvicorn CLI to run app
-CMD ["python", "main.py"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
