@@ -11,7 +11,7 @@
 - Parses tokens (**INTERPRET**)
 - Reflects on meaning (**REFLECT**)
 - Anchors truth (**TRUTH**)
-- Stores memory in flat log, SQL (DuckDB), and vector database (Qdrant) (**EMBED**)
+ - Stores memory in PostgreSQL and vector database (Qdrant) (**EMBED**)
 - Recalls past memories on command (**REPLAY**)
 - Displays memory as a live feed (**VIEW**)
 
@@ -24,7 +24,7 @@ NOW → EXPRESS → INTERPRET → REFLECT → TRUTH → EMBED → REPLAY → VIE
 ```
 
 - **Redis Pub/Sub** connects all services
-- **DuckDB** handles structured memory
+ - **PostgreSQL** handles structured memory
 - **Qdrant** stores and queries vectorized memory
 - **SentenceTransformer** (`all-MiniLM-L6-v2`) embeds meaning
 
@@ -77,10 +77,11 @@ http://localhost:8007
 | `express_emitter`         | 8002  | Broadcasts snapshot |
 | `interpret_service`       | 8003  | Parses tokens |
 | `reflect_service`         | 8004  | Runs truth filter |
-| `embed_memory_service`    | 8005  | Logs, DuckDB, Qdrant |
+| `embed_memory_service`    | 8005  | Postgres + Qdrant persistence |
 | `replay_memory_service`   | 8006  | Emits past memory |
 | `memory_replay_viewer`    | 8007  | Web memory stream |
 | `qdrant`                  | 6333  | Vector memory engine |
+| `postgres`                | 5432  | Relational metadata store |
 | `genio_redis`             | 6379  | Message bus |
 
 ---
