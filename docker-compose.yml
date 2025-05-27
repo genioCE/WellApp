@@ -94,6 +94,15 @@ services:
     depends_on:
       - genio_redis
 
+  visualize_service:
+    build: ./visualize_service
+    volumes:
+      - ./shared:/app/shared
+    ports:
+      - "8008:8000"
+    depends_on:
+      - genio_redis
+
   qdrant:
     image: qdrant/qdrant
     ports:
