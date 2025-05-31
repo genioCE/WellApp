@@ -4,3 +4,6 @@ scikit-learn
 plotly
 fastapi
 uvicorn[standard]
+loguru
+prometheus-fastapi-instrumentator
+pandas

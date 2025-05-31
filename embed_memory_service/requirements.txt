@@ -1,6 +1,7 @@
-redis
-asyncpg
-qdrant-client
-numpy
 fastapi
 uvicorn[standard]
+prometheus-fastapi-instrumentator
+loguru
+redis[hiredis]
+asyncpg
+qdrant-client

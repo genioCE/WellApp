@@ -1,7 +1,7 @@
- 
 fastapi
-uvicorn
-redis
-pydantic
-python-multipart
+uvicorn[standard]
+prometheus-fastapi-instrumentator
+loguru
 psycopg2-binary
+redis[hiredis]
+python-multipart

@@ -44,12 +44,12 @@ services:
       PGDATABASE: database
       REDIS_HOST: genio_redis
       REDIS_PORT: 6379
+      NOW_CHANNEL: "now_channel"
     depends_on:
       genio_redis:
         condition: service_started
       postgres:
         condition: service_healthy
-
 
   express_emitter:
     build: ./express_emitter
@@ -60,6 +60,8 @@ services:
     environment:
       REDIS_HOST: genio_redis
       REDIS_PORT: 6379
+      NOW_CHANNEL: "now_channel"
+      EXPRESS_CHANNEL: "express_channel"
     depends_on:
       genio_redis:
         condition: service_started
@@ -73,6 +75,8 @@ services:
     environment:
       REDIS_HOST: genio_redis
       REDIS_PORT: 6379
+      EXPRESS_CHANNEL: "express_channel"
+      INTERPRET_CHANNEL: "interpret_channel"
     depends_on:
       genio_redis:
         condition: service_started
@@ -86,6 +90,8 @@ services:
     environment:
       REDIS_HOST: genio_redis
       REDIS_PORT: 6379
+      INTERPRET_CHANNEL: "interpret_channel"
+      REFLECT_CHANNEL: "reflect_channel"
     depends_on:
       genio_redis:
         condition: service_started
@@ -100,6 +106,8 @@ services:
     environment:
       REDIS_HOST: genio_redis
       REDIS_PORT: 6379
+      REFLECT_CHANNEL: "reflect_channel"
+      VISUALIZE_CHANNEL: "visualize_channel"
     depends_on:
       genio_redis:
         condition: service_started
@@ -120,6 +128,8 @@ services:
       QDRANT_PORT: 6333
       REDIS_HOST: genio_redis
       REDIS_PORT: 6379
+      VISUALIZE_CHANNEL: "visualize_channel"
+      EMBED_CHANNEL: "embed_channel"
     depends_on:
       genio_redis:
         condition: service_started
@@ -140,6 +150,8 @@ services:
       QDRANT_PORT: 6333
       REDIS_HOST: genio_redis
       REDIS_PORT: 6379
+      EMBED_CHANNEL: "embed_channel"
+      REPLAY_CHANNEL: "replay_channel"
     depends_on:
       genio_redis:
         condition: service_started
@@ -155,6 +167,8 @@ services:
     environment:
       REDIS_HOST: genio_redis
       REDIS_PORT: 6379
+      REPLAY_CHANNEL: "replay_channel"
+      MEMORY_REPLAY_CHANNEL: "memory_replay_channel"
     depends_on:
       genio_redis:
         condition: service_started

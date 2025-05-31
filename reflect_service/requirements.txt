@@ -1,4 +1,7 @@
-redis
 numpy
 fastapi
 uvicorn[standard]
+redis[asyncio]
+loguru
+prometheus-fastapi-instrumentator
+prometheus-client
