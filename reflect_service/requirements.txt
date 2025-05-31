@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 numpy
 fastapi
 uvicorn[standard]
@@ -5,3 +6,9 @@ redis[asyncio]
 loguru
 prometheus-fastapi-instrumentator
 prometheus-client
+=======
+redis
+numpy
+fastapi
+uvicorn[standard]
+>>>>>>> ceb7c6450b733fa1b750d1d5ec6570ee242452ab

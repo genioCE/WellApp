@@ -1,5 +1,6 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from datetime import datetime
+<<<<<<< HEAD
 from loguru import logger
 from database import Database
 from schemas import EmbedRequest
@@ -16,6 +17,16 @@ app = FastAPI(title="Genio Embed Memory Service")
 # Instrument middleware immediately after FastAPI app creation
 Instrumentator().instrument(app).expose(app)
 
+=======
+from database import Database
+from schemas import EmbedRequest
+from shared.logger import logger
+from shared.redis_utils import subscribe, publish
+import asyncio
+import json
+
+app = FastAPI(title="Genio Embed Memory Service")
+>>>>>>> ceb7c6450b733fa1b750d1d5ec6570ee242452ab
 db = Database()
 
 # Redis configuration
@@ -36,6 +47,7 @@ shutdown_event = asyncio.Event()
 @app.on_event("startup")
 async def startup():
     await db.connect()
+<<<<<<< HEAD
     asyncio.create_task(redis_listener())
 
 @app.on_event("shutdown")
@@ -67,12 +79,16 @@ async def detailed_healthcheck():
         "database": db_status,
         "timestamp": datetime.utcnow().isoformat()
     }
+=======
+    asyncio.create_task(redis_listener())  # Explicitly launches listener correctly
+>>>>>>> ceb7c6450b733fa1b750d1d5ec6570ee242452ab
 
 @app.get("/")
 async def healthcheck():
     return {"status": "embed_memory_service active"}
 
 async def redis_listener():
+<<<<<<< HEAD
     pubsub = redis_client.pubsub()
     await pubsub.subscribe(VISUALIZE_CHANNEL)
     logger.info(f"[EMBED] Subscribed to '{VISUALIZE_CHANNEL}'")
@@ -86,6 +102,21 @@ async def redis_listener():
             except Exception as e:
                 embed_errors.inc()
                 logger.error("[EMBED] Error processing message", error=str(e))
+=======
+    pubsub = subscribe("visualize_channel")
+    logger.info("[EMBED] Subscribed to 'visualize_channel'")
+
+    loop = asyncio.get_running_loop()
+
+    while True:
+        message = await loop.run_in_executor(None, pubsub.get_message, True, None)
+        if message and message["type"] == "message":
+            try:
+                data = json.loads(message["data"])
+                await handle_embedding(data)
+            except Exception as e:
+                logger.error(f"[EMBED] Error processing message: {e}")
+>>>>>>> ceb7c6450b733fa1b750d1d5ec6570ee242452ab
 
 async def handle_embedding(data):
     uuid = data.get("uuid", datetime.utcnow().isoformat())
@@ -94,6 +125,7 @@ async def handle_embedding(data):
     timestamp = datetime.utcnow()
 
     if not anchored_embedding:
+<<<<<<< HEAD
         embed_errors.inc()
         logger.error("[EMBED] Missing anchored_embedding", uuid=uuid)
         return
@@ -109,3 +141,14 @@ async def handle_embedding(data):
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000)
+=======
+        logger.error(f"[EMBED] Missing anchored_embedding for uuid={uuid}")
+        return
+
+    try:
+        metadata_id = await db.store_embedding(uuid, anchored_embedding, metadata, timestamp)
+        publish("embed_channel", {"uuid": uuid, "metadata_id": metadata_id})
+        logger.info(f"[EMBED] Stored and published uuid={uuid}")
+    except Exception as e:
+        logger.error(f"[EMBED] Error storing embedding uuid={uuid}: {e}")
+>>>>>>> ceb7c6450b733fa1b750d1d5ec6570ee242452ab

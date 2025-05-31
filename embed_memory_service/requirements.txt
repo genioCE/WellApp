@@ -1,7 +1,14 @@
+<<<<<<< HEAD
 fastapi
 uvicorn[standard]
 prometheus-fastapi-instrumentator
 loguru
 redis[hiredis]
+=======
+redis
+>>>>>>> ceb7c6450b733fa1b750d1d5ec6570ee242452ab
 asyncpg
 qdrant-client
+numpy
+fastapi
+uvicorn[standard]

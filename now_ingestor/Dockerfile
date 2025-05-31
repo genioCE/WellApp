@@ -1,5 +1,6 @@
 FROM python:3.11-slim
 
+<<<<<<< HEAD
 # Set working directory
 WORKDIR /app
 
@@ -20,4 +21,14 @@ COPY . .
 EXPOSE 8000
 
 # Run FastAPI using Uvicorn
+=======
+WORKDIR /app
+
+COPY . /app
+RUN pip install --upgrade pip
+RUN pip install -r requirements.txt
+
+ENV PYTHONPATH=/app
+
+>>>>>>> ceb7c6450b733fa1b750d1d5ec6570ee242452ab
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

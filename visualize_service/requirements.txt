@@ -4,6 +4,9 @@ scikit-learn
 plotly
 fastapi
 uvicorn[standard]
+<<<<<<< HEAD
 loguru
 prometheus-fastapi-instrumentator
 pandas
+=======
+>>>>>>> ceb7c6450b733fa1b750d1d5ec6570ee242452ab

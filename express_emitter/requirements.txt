@@ -1,6 +1,13 @@
+<<<<<<< HEAD
 fastapi
 uvicorn[standard]
 sentence-transformers
 redis[hiredis]
 loguru
 prometheus-fastapi-instrumentator
+=======
+redis[asyncio]
+sentence-transformers
+fastapi
+uvicorn[standard]
+>>>>>>> ceb7c6450b733fa1b750d1d5ec6570ee242452ab

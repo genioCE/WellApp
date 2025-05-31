@@ -44,12 +44,19 @@ services:
       PGDATABASE: database
       REDIS_HOST: genio_redis
       REDIS_PORT: 6379
+<<<<<<< HEAD
       NOW_CHANNEL: "now_channel"
+=======
+>>>>>>> ceb7c6450b733fa1b750d1d5ec6570ee242452ab
     depends_on:
       genio_redis:
         condition: service_started
       postgres:
         condition: service_healthy
+<<<<<<< HEAD
+=======
+
+>>>>>>> ceb7c6450b733fa1b750d1d5ec6570ee242452ab
 
   express_emitter:
     build: ./express_emitter
@@ -60,8 +67,11 @@ services:
     environment:
       REDIS_HOST: genio_redis
       REDIS_PORT: 6379
+<<<<<<< HEAD
       NOW_CHANNEL: "now_channel"
       EXPRESS_CHANNEL: "express_channel"
+=======
+>>>>>>> ceb7c6450b733fa1b750d1d5ec6570ee242452ab
     depends_on:
       genio_redis:
         condition: service_started
@@ -75,8 +85,11 @@ services:
     environment:
       REDIS_HOST: genio_redis
       REDIS_PORT: 6379
+<<<<<<< HEAD
       EXPRESS_CHANNEL: "express_channel"
       INTERPRET_CHANNEL: "interpret_channel"
+=======
+>>>>>>> ceb7c6450b733fa1b750d1d5ec6570ee242452ab
     depends_on:
       genio_redis:
         condition: service_started
@@ -90,8 +103,11 @@ services:
     environment:
       REDIS_HOST: genio_redis
       REDIS_PORT: 6379
+<<<<<<< HEAD
       INTERPRET_CHANNEL: "interpret_channel"
       REFLECT_CHANNEL: "reflect_channel"
+=======
+>>>>>>> ceb7c6450b733fa1b750d1d5ec6570ee242452ab
     depends_on:
       genio_redis:
         condition: service_started
@@ -106,8 +122,11 @@ services:
     environment:
       REDIS_HOST: genio_redis
       REDIS_PORT: 6379
+<<<<<<< HEAD
       REFLECT_CHANNEL: "reflect_channel"
       VISUALIZE_CHANNEL: "visualize_channel"
+=======
+>>>>>>> ceb7c6450b733fa1b750d1d5ec6570ee242452ab
     depends_on:
       genio_redis:
         condition: service_started
@@ -128,8 +147,11 @@ services:
       QDRANT_PORT: 6333
       REDIS_HOST: genio_redis
       REDIS_PORT: 6379
+<<<<<<< HEAD
       VISUALIZE_CHANNEL: "visualize_channel"
       EMBED_CHANNEL: "embed_channel"
+=======
+>>>>>>> ceb7c6450b733fa1b750d1d5ec6570ee242452ab
     depends_on:
       genio_redis:
         condition: service_started
@@ -150,8 +172,11 @@ services:
       QDRANT_PORT: 6333
       REDIS_HOST: genio_redis
       REDIS_PORT: 6379
+<<<<<<< HEAD
       EMBED_CHANNEL: "embed_channel"
       REPLAY_CHANNEL: "replay_channel"
+=======
+>>>>>>> ceb7c6450b733fa1b750d1d5ec6570ee242452ab
     depends_on:
       genio_redis:
         condition: service_started
@@ -167,8 +192,11 @@ services:
     environment:
       REDIS_HOST: genio_redis
       REDIS_PORT: 6379
+<<<<<<< HEAD
       REPLAY_CHANNEL: "replay_channel"
       MEMORY_REPLAY_CHANNEL: "memory_replay_channel"
+=======
+>>>>>>> ceb7c6450b733fa1b750d1d5ec6570ee242452ab
     depends_on:
       genio_redis:
         condition: service_started

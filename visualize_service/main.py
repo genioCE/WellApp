@@ -4,17 +4,26 @@ from datetime import datetime
 from loguru import logger
 from schemas import VisualizeRequest, VisualizeResponse
 from visualization import generate_visualization
+<<<<<<< HEAD
 import redis.asyncio as redis
 from prometheus_fastapi_instrumentator import Instrumentator
 from prometheus_client import Histogram, Counter
 import asyncio
 import json
 import os
+=======
+from shared.redis_utils import subscribe, publish
+import threading
+import json
+import asyncio  # <-- explicitly import this
+>>>>>>> ceb7c6450b733fa1b750d1d5ec6570ee242452ab
 import uvicorn
+
 
 app = FastAPI(title="Genio Visualize Service")
 app.mount("/static", StaticFiles(directory="."), name="static")
 
+<<<<<<< HEAD
 # Immediately after app creation (correct middleware placement)
 Instrumentator().instrument(app).expose(app)
 
@@ -33,6 +42,8 @@ visualize_errors = Counter('visualize_errors_total', 'Total errors in Visualize 
 
 shutdown_event = asyncio.Event()
 
+=======
+>>>>>>> ceb7c6450b733fa1b750d1d5ec6570ee242452ab
 async def process_message(data):
     req = VisualizeRequest(
         uuid=data["uuid"],
@@ -41,16 +52,23 @@ async def process_message(data):
         dimensions=data.get("dimensions", 2)
     )
     try:
+<<<<<<< HEAD
         with visualization_latency.time():
             path, vis_type = await generate_visualization(
                 req.anchored_embedding, req.method, req.dimensions
             )
+=======
+        path, vis_type = await generate_visualization(
+            req.anchored_embedding, req.method, req.dimensions
+        )
+>>>>>>> ceb7c6450b733fa1b750d1d5ec6570ee242452ab
         url = f"/static/{path}"
         response = {
             "uuid": req.uuid,
             "visualization_url": url,
             "visualization_type": vis_type,
             "timestamp": datetime.utcnow().isoformat(),
+<<<<<<< HEAD
             "anchored_embedding": req.anchored_embedding
         }
         await redis_client.publish(VISUALIZE_CHANNEL, json.dumps(response))
@@ -86,6 +104,32 @@ async def shutdown_event_trigger():
 @app.post("/visualize", response_model=VisualizeResponse)
 async def visualize(req: VisualizeRequest):
     logger.info("[VISUALIZE] HTTP Request", uuid=req.uuid)
+=======
+            "anchored_embedding": req.anchored_embedding  # <-- explicitly added
+        }
+        publish("visualize_channel", response)
+        logger.info(f"[VISUALIZE] Published visualization uuid={req.uuid} to 'visualize_channel'")
+    except Exception as e:
+        logger.error(f"[VISUALIZE] Error generating visualization: {e}")
+
+def listener():
+    pubsub = subscribe("reflect_channel")
+    logger.info("[VISUALIZE] Subscribed to 'reflect_channel'")
+    for message in pubsub.listen():
+        if message["type"] == "message":
+            try:
+                data = json.loads(message["data"])
+                asyncio.run(process_message(data))
+            except Exception as e:
+                logger.error(f"[VISUALIZE] Failed to process message: {e}")
+
+# Start Redis listener explicitly in background
+threading.Thread(target=listener, daemon=True).start()
+
+@app.post("/visualize", response_model=VisualizeResponse)
+async def visualize(req: VisualizeRequest):
+    logger.info(f"[VISUALIZE] HTTP Request: {req.uuid}")
+>>>>>>> ceb7c6450b733fa1b750d1d5ec6570ee242452ab
     try:
         with visualization_latency.time():
             path, vis_type = await generate_visualization(req.anchored_embedding, req.method, req.dimensions)
