@@ -4,9 +4,6 @@ numpy
 scikit-learn
 fastapi
 uvicorn[standard]
-<<<<<<< HEAD
 loguru
 prometheus-fastapi-instrumentator
 prometheus-client
-=======
->>>>>>> ceb7c6450b733fa1b750d1d5ec6570ee242452ab

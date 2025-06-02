@@ -8,26 +8,16 @@ from typing import List
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from sentence_transformers import SentenceTransformer
-<<<<<<< HEAD
 from prometheus_fastapi_instrumentator import Instrumentator
 from prometheus_client import Histogram
 from loguru import logger
 import redis.asyncio as redis
-=======
-import asyncio
-import re
-import json
-import redis.asyncio as redis
-from shared.logger import logger
-from shared.config import REDIS_HOST, REDIS_PORT
->>>>>>> ceb7c6450b733fa1b750d1d5ec6570ee242452ab
 
 from shared.config import REDIS_HOST, REDIS_PORT
 
 # FastAPI app initialization
 app = FastAPI(title="Genio EXPRESS Semantic Encoding Service")
 
-<<<<<<< HEAD
 # Middleware instrumentation immediately after app creation
 Instrumentator().instrument(app).expose(app)
 
@@ -39,8 +29,7 @@ redis_client = redis.Redis(connection_pool=redis_pool)
 
 # Prometheus metrics
 embedding_latency = Histogram(
-    'embedding_generation_seconds',
-    'Time spent generating embeddings'
+    "embedding_generation_seconds", "Time spent generating embeddings"
 )
 
 # Environment configurations
@@ -49,18 +38,14 @@ NOW_CHANNEL = os.getenv("NOW_CHANNEL", "now_channel")
 EXPRESS_CHANNEL = os.getenv("EXPRESS_CHANNEL", "express_channel")
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", "32"))
 
-=======
-# Initialize Redis
-redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
-
-MODEL_NAME = "all-MiniLM-L6-v2"
->>>>>>> ceb7c6450b733fa1b750d1d5ec6570ee242452ab
 model = SentenceTransformer(MODEL_NAME)
+
 
 # Request and Response Schemas
 class EncodeRequest(BaseModel):
     uuid: str
     text: str
+
 
 class EncodeResponse(BaseModel):
     uuid: str
@@ -68,17 +53,19 @@ class EncodeResponse(BaseModel):
     timestamp: datetime
     model: str
 
+
 # Text preprocessing utility
 def preprocess_text(text: str) -> str:
     text = re.sub(r"[^\w\s]", "", text)
     return " ".join(text.split())
 
-<<<<<<< HEAD
+
 # Batch embedding function
 async def encode_batch(texts: List[str]) -> List[List[float]]:
     loop = asyncio.get_event_loop()
     embeddings = await loop.run_in_executor(None, model.encode, texts)
     return [emb.tolist() for emb in embeddings]
+
 
 # Redis listener for batching embeddings
 async def handle_now_channel():
@@ -94,34 +81,23 @@ async def handle_now_channel():
         now = datetime.utcnow()
 
         if message:
-=======
-async def publish_embedding(response: EncodeResponse):
-    channel = "express_channel"
-    await redis_client.publish(channel, response.json())
-    logger.info(f"[EXPRESS] Published embedding uuid={response.uuid} to channel={channel}")
-
-async def handle_now_channel(pubsub):
-    channel = "now_channel"
-    await pubsub.subscribe(channel)
-    logger.info(f"[EXPRESS] Subscribed to Redis channel '{channel}'")
-
-    async for message in pubsub.listen():
-        if message['type'] == 'message':
->>>>>>> ceb7c6450b733fa1b750d1d5ec6570ee242452ab
             try:
-                data = json.loads(message['data'])
-                uuid = data.get('uuid', datetime.utcnow().isoformat())
-                content = data['content']
-<<<<<<< HEAD
+                data = json.loads(message["data"])
+                uuid = data.get("uuid", datetime.utcnow().isoformat())
+                content = data["content"]
                 buffer.append((uuid, content))
             except Exception as e:
                 logger.error(f"[EXPRESS] Message handling error: {e}")
 
         # Check if buffer should be flushed by size or time
-        if buffer and (len(buffer) >= BATCH_SIZE or (now - buffer_timer).total_seconds() >= flush_interval):
+        if buffer and (
+            len(buffer) >= BATCH_SIZE
+            or (now - buffer_timer).total_seconds() >= flush_interval
+        ):
             await process_batch(buffer)
             buffer.clear()
             buffer_timer = now
+
 
 async def process_batch(batch):
     uuids, contents = zip(*batch)
@@ -136,43 +112,19 @@ async def process_batch(batch):
             "uuid": uuid,
             "embedding": embedding,
             "timestamp": timestamp,
-            "content": content
+            "content": content,
         }
         await redis_client.publish(EXPRESS_CHANNEL, json.dumps(payload))
         logger.info("[EXPRESS] Published embedding", uuid=uuid)
+
 
 # Startup event: only tasks needing asynchronous context here
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(handle_now_channel())
 
+
 # HTTP API endpoint for single embedding generation
-=======
-
-                cleaned = preprocess_text(content)
-                logger.info(f"[EXPRESS] Encoding uuid={uuid}")
-                loop = asyncio.get_event_loop()
-                embedding = await loop.run_in_executor(None, model.encode, cleaned)
-
-                response = {
-                    "uuid": uuid,
-                    "embedding": embedding.tolist(),
-                    "timestamp": datetime.utcnow().isoformat(),
-                    "content": content  # <-- ADD THIS LINE explicitly
-                }
-
-                await redis_client.publish("express_channel", json.dumps(response))
-                logger.info(f"[EXPRESS] Published embedding and content uuid={uuid} to 'express_channel'")
-
-            except Exception as e:
-                logger.error(f"[EXPRESS] Failed to process message: {e}")
-
-@app.on_event("startup")
-async def startup_event():
-    pubsub = redis_client.pubsub()
-    asyncio.create_task(handle_now_channel(pubsub))
-
->>>>>>> ceb7c6450b733fa1b750d1d5ec6570ee242452ab
 @app.post("/encode", response_model=EncodeResponse)
 async def encode(req: EncodeRequest):
     if not req.text.strip():
@@ -180,24 +132,19 @@ async def encode(req: EncodeRequest):
         raise HTTPException(status_code=400, detail="Input text is empty")
 
     cleaned = preprocess_text(req.text)
-<<<<<<< HEAD
     with embedding_latency.time():
         loop = asyncio.get_event_loop()
         embedding = await loop.run_in_executor(None, model.encode, cleaned)
 
     logger.info("[EXPRESS] Encoded via API", uuid=req.uuid)
 
-=======
-    logger.info(f"[EXPRESS] Encoding via API uuid={req.uuid}")
-    loop = asyncio.get_event_loop()
-    embedding = await loop.run_in_executor(None, model.encode, cleaned)
->>>>>>> ceb7c6450b733fa1b750d1d5ec6570ee242452ab
     return EncodeResponse(
         uuid=req.uuid,
         embedding=embedding.tolist(),
         timestamp=datetime.utcnow(),
-        model=MODEL_NAME
+        model=MODEL_NAME,
     )
+
 
 # Enhanced health check endpoint
 @app.get("/health")
@@ -219,9 +166,11 @@ async def detailed_healthcheck():
         "status": "active",
         "redis": redis_status,
         "model": model_status,
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.utcnow().isoformat(),
     }
+
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run("main:app", host="0.0.0.0", port=8000)

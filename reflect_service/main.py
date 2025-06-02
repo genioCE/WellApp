@@ -3,7 +3,6 @@ from shared.logger import logger
 from routes import router
 from validation import validate_embedding
 from schemas import AnchorResponse
-<<<<<<< HEAD
 import redis.asyncio as redis
 from loguru import logger
 from prometheus_fastapi_instrumentator import Instrumentator
@@ -29,34 +28,24 @@ INTERPRET_CHANNEL = os.getenv("INTERPRET_CHANNEL", "interpret_channel")
 REFLECT_CHANNEL = os.getenv("REFLECT_CHANNEL", "reflect_channel")
 
 redis_pool = redis.ConnectionPool.from_url(
-    f"redis://{REDIS_HOST}:{REDIS_PORT}/0",
-    decode_responses=True
+    f"redis://{REDIS_HOST}:{REDIS_PORT}/0", decode_responses=True
 )
 redis_client = redis.Redis(connection_pool=redis_pool)
 
 # Prometheus metrics
-validation_latency = Histogram('validation_latency_seconds', 'Embedding validation latency')
-reflect_errors = Counter('reflect_errors_total', 'Total errors in Reflect service')
+validation_latency = Histogram(
+    "validation_latency_seconds", "Embedding validation latency"
+)
+reflect_errors = Counter("reflect_errors_total", "Total errors in Reflect service")
 
 shutdown_event = asyncio.Event()
 
-=======
-from shared.redis_utils import subscribe, publish
-import threading
-import json
-import asyncio
-from datetime import datetime
 
-app = FastAPI(title="Genio REFLECT Service")
-app.include_router(router)
-
->>>>>>> ceb7c6450b733fa1b750d1d5ec6570ee242452ab
 async def handle_message(data):
     uuid = data.get("uuid", datetime.utcnow().isoformat())
     pruned_embedding = data.get("pruned_embedding")
 
     if not pruned_embedding:
-<<<<<<< HEAD
         reflect_errors.inc()
         logger.error("[REFLECT] Missing pruned_embedding", uuid=uuid)
         return
@@ -68,26 +57,19 @@ async def handle_message(data):
         reflect_errors.inc()
         logger.error("[REFLECT] Validation error", uuid=uuid, error=str(e))
         return
-=======
-        logger.error(f"[REFLECT] Missing pruned_embedding for uuid={uuid}")
-        return
-
-    anchored, status, summary = await validate_embedding(pruned_embedding)
-    logger.info(f"[REFLECT] uuid={uuid}, status={status}, summary={summary}")
->>>>>>> ceb7c6450b733fa1b750d1d5ec6570ee242452ab
 
     response = AnchorResponse(
         uuid=uuid,
         anchored_embedding=anchored,
         status=status,
         timestamp=datetime.utcnow(),
-        summary=summary
+        summary=summary,
     )
 
-<<<<<<< HEAD
     # Corrected serialization using response.json()
     await redis_client.publish(REFLECT_CHANNEL, response.json())
     logger.info("[REFLECT] Published anchored embedding", uuid=uuid, status=status)
+
 
 async def listener():
     pubsub = redis_client.pubsub()
@@ -104,14 +86,17 @@ async def listener():
                 reflect_errors.inc()
                 logger.error("[REFLECT] Error processing message", error=str(e))
 
+
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(listener())
+
 
 @app.on_event("shutdown")
 async def shutdown_event_trigger():
     shutdown_event.set()
     await redis_client.close()
+
 
 @app.get("/health")
 async def detailed_healthcheck():
@@ -131,30 +116,14 @@ async def detailed_healthcheck():
         "status": "active",
         "redis": redis_status,
         "validation_module": validation_status,
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.utcnow().isoformat(),
     }
-=======
-    publish("reflect_channel", response.dict())
-    logger.info(f"[REFLECT] Published anchored embedding uuid={uuid} to 'reflect_channel'")
 
-def listener():
-    pubsub = subscribe("interpret_channel")
-    logger.info("[REFLECT] Subscribed to 'interpret_channel'")
-
-    for message in pubsub.listen():
-        if message["type"] == "message":
-            try:
-                data = json.loads(message["data"])
-                asyncio.run(handle_message(data))
-            except Exception as e:
-                logger.error(f"[REFLECT] Error processing message: {e}")
-
-threading.Thread(target=listener, daemon=True).start()
->>>>>>> ceb7c6450b733fa1b750d1d5ec6570ee242452ab
 
 @app.get("/")
 async def healthcheck():
     return {"status": "reflect_service active"}
+
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000)
