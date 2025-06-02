@@ -9,9 +9,9 @@ from loguru import logger
 import asyncio
 import traceback
 
-<<<<<<< HEAD
 VIS_DIR = "visualizations"
 os.makedirs(VIS_DIR, exist_ok=True)
+
 
 def dimensionality_reduction(embedding_array, method, dimensions):
     if method.lower() == "pca":
@@ -24,19 +24,20 @@ def dimensionality_reduction(embedding_array, method, dimensions):
     reduced_embedding = reducer.fit_transform(embedding_array)
     return reduced_embedding
 
+
 def create_plot(reduced_embedding, method, dimensions):
     if dimensions == 3:
         fig = px.scatter_3d(
             x=reduced_embedding[:, 0],
             y=reduced_embedding[:, 1],
             z=reduced_embedding[:, 2],
-            title=f"{method.upper()} 3D Visualization"
+            title=f"{method.upper()} 3D Visualization",
         )
     elif dimensions == 2:
         fig = px.scatter(
             x=reduced_embedding[:, 0],
             y=reduced_embedding[:, 1],
-            title=f"{method.upper()} 2D Visualization"
+            title=f"{method.upper()} 2D Visualization",
         )
     else:
         raise ValueError("Visualization only supports 2D or 3D dimensions")
@@ -45,6 +46,7 @@ def create_plot(reduced_embedding, method, dimensions):
     path = os.path.join(VIS_DIR, file_id)
     fig.write_html(path)
     return path
+
 
 async def generate_visualization(
     embedding: List[float], method: str = "pca", dimensions: int = 2
@@ -69,7 +71,9 @@ async def generate_visualization(
         vis_type = f"{method.upper()} {dimensions}D Scatter Plot"
         logger.info(
             "Visualization created successfully",
-            method=method, dimensions=dimensions, path=path
+            method=method,
+            dimensions=dimensions,
+            path=path,
         )
 
         return path, vis_type
@@ -79,20 +83,3 @@ async def generate_visualization(
         logger.error(f"Visualization Exception: {str(e)}")
         logger.error(f"Traceback: {detailed_traceback}")
         raise
-=======
-async def generate_visualization(embedding: List[float], method: str = "pca", dimensions: int = 2):
-    def _create_plot():
-        import plotly.graph_objects as go
-
-        X = np.array(embedding).flatten()
-        fig = go.Figure([go.Bar(y=X)])
-        os.makedirs("visualizations", exist_ok=True)
-        file_id = f"{uuid.uuid4()}.html"
-        path = os.path.join("visualizations", file_id)
-        fig.write_html(path)
-        return path
-
-    path = await asyncio.to_thread(_create_plot)
-    return path, "Bar Plot - Single Embedding"
-
->>>>>>> ceb7c6450b733fa1b750d1d5ec6570ee242452ab

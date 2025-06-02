@@ -8,7 +8,6 @@ import os
 from datetime import datetime
 from schemas import PruneRequest, PruneResponse
 from pruning import prune_embedding
-<<<<<<< HEAD
 from loguru import logger
 from prometheus_fastapi_instrumentator import Instrumentator
 from prometheus_client import Histogram, Counter
@@ -21,12 +20,10 @@ app = FastAPI(title="Genio INTERPRET Service")
 Instrumentator().instrument(app).expose(app)
 
 # Prometheus metrics
-pruning_latency = Histogram('pruning_latency_seconds', 'Time spent pruning embeddings')
-interpret_errors = Counter('interpret_errors_total', 'Total errors in Interpret service')
-=======
-
-app = FastAPI(title="Genio INTERPRET Service")
->>>>>>> ceb7c6450b733fa1b750d1d5ec6570ee242452ab
+pruning_latency = Histogram("pruning_latency_seconds", "Time spent pruning embeddings")
+interpret_errors = Counter(
+    "interpret_errors_total", "Total errors in Interpret service"
+)
 
 # Load spaCy model safely
 try:
@@ -43,8 +40,8 @@ INTERPRET_CHANNEL = os.getenv("INTERPRET_CHANNEL", "interpret_channel")
 
 shutdown_flag = threading.Event()
 
+
 def listener():
-<<<<<<< HEAD
     pubsub = subscribe(EXPRESS_CHANNEL)
     logger.info(f"[INTERPRET] Subscribed to '{EXPRESS_CHANNEL}'")
 
@@ -62,76 +59,44 @@ def listener():
                     logger.error(f"[INTERPRET] Missing embedding for uuid={uuid}")
                     continue
 
-=======
-    pubsub = subscribe("express_channel")
-    logger.info("[INTERPRET] Subscribed to 'express_channel'")
-
-    for message in pubsub.listen():
-        if message["type"] == "message":
-            try:
-                data = json.loads(message["data"])
-                content = data.get("content")
-                embedding = data.get("embedding")
-                uuid = data.get("uuid", datetime.utcnow().isoformat())
-
-                if not embedding:
-                    logger.error(f"[INTERPRET] Missing embedding for uuid={uuid}")
-                    continue
-
-                # Tokenize content
->>>>>>> ceb7c6450b733fa1b750d1d5ec6570ee242452ab
                 doc = nlp(content)
                 tokens = [token.text for token in doc if not token.is_stop]
                 logger.info(f"[INTERPRET] Parsed Tokens: {tokens}")
 
-<<<<<<< HEAD
                 with pruning_latency.time():
                     pruned_embedding, details = prune_embedding(
                         embedding, THRESHOLD, REDUCE_DIM if REDUCE_DIM > 0 else None
                     )
-                logger.info(f"[INTERPRET] Pruned embedding uuid={uuid}, details={details}")
-
-=======
-                # Prune embedding
-                pruned_embedding, details = prune_embedding(
-                    embedding, THRESHOLD, REDUCE_DIM if REDUCE_DIM > 0 else None
+                logger.info(
+                    f"[INTERPRET] Pruned embedding uuid={uuid}, details={details}"
                 )
-                logger.info(f"[INTERPRET] Pruned embedding uuid={uuid}, details={details}")
 
-                # Build message for downstream service
->>>>>>> ceb7c6450b733fa1b750d1d5ec6570ee242452ab
                 downstream_message = {
                     "uuid": uuid,
                     "tokens": tokens,
                     "pruned_embedding": pruned_embedding,
                     "pruning_details": details,
-                    "timestamp": datetime.utcnow().isoformat()
+                    "timestamp": datetime.utcnow().isoformat(),
                 }
 
-<<<<<<< HEAD
                 publish(INTERPRET_CHANNEL, downstream_message)
-                logger.info(f"[INTERPRET] Published data uuid={uuid} to '{INTERPRET_CHANNEL}'")
+                logger.info(
+                    f"[INTERPRET] Published data uuid={uuid} to '{INTERPRET_CHANNEL}'"
+                )
 
             except Exception as e:
                 interpret_errors.inc()
                 logger.error(f"[INTERPRET] Error processing message: {e}")
 
+
 def handle_shutdown(signal_received, frame):
     shutdown_flag.set()
 
+
 signal.signal(signal.SIGINT, handle_shutdown)
 signal.signal(signal.SIGTERM, handle_shutdown)
-=======
-                # Publish clearly to the next channel
-                publish("interpret_channel", downstream_message)
-                logger.info(f"[INTERPRET] Published processed data uuid={uuid} to 'interpret_channel'")
-
-            except Exception as e:
-                logger.error(f"[INTERPRET] Error processing message: {e}")
-
-# Start listener thread
->>>>>>> ceb7c6450b733fa1b750d1d5ec6570ee242452ab
 threading.Thread(target=listener, daemon=True).start()
+
 
 @app.get("/health")
 def detailed_healthcheck():
@@ -144,12 +109,14 @@ def detailed_healthcheck():
     return {
         "status": "active",
         "spacy": spacy_status,
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.utcnow().isoformat(),
     }
+
 
 @app.get("/")
 def healthcheck():
     return {"status": "interpret_service active"}
+
 
 @app.post("/prune", response_model=PruneResponse)
 async def prune(req: PruneRequest):
@@ -170,6 +137,7 @@ async def prune(req: PruneRequest):
         timestamp=datetime.utcnow(),
         details=details,
     )
+
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000)
