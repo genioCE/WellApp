@@ -1,4 +1,5 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Body
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from uuid import uuid4
 from datetime import datetime, timedelta
@@ -12,18 +13,31 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from shared.schemas import NowSignal
 from shared.redis_utils import publish
 
+# ────────────────────────────────────────────
 # Configuration Constants
+# ────────────────────────────────────────────
 ALLOWED_EXTENSIONS = {'.txt', '.md', '.json'}
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
 STORAGE_ROOT = '/tmp/ingested_files'
 
-# Initialize FastAPI app
+# ────────────────────────────────────────────
+# FastAPI App Setup
+# ────────────────────────────────────────────
 app = FastAPI(title="Genio NOW Ingestor Service")
 
-# Prometheus middleware setup immediately after app creation
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Change to ['http://localhost:5173'] for production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 Instrumentator().instrument(app).expose(app)
 
-# Setup PostgreSQL connection pool
+# ────────────────────────────────────────────
+# PostgreSQL Connection Pool
+# ────────────────────────────────────────────
 pool = SimpleConnectionPool(
     minconn=1,
     maxconn=10,
@@ -39,6 +53,14 @@ def get_db_connection():
 
 def put_db_connection(conn):
     pool.putconn(conn)
+
+# ────────────────────────────────────────────
+# Startup: Init DB + Storage Dir
+# ────────────────────────────────────────────
+@app.on_event("startup")
+def startup_event():
+    init_db()
+    os.makedirs(STORAGE_ROOT, exist_ok=True)
 
 def init_db():
     conn = get_db_connection()
@@ -59,12 +81,9 @@ def init_db():
     finally:
         put_db_connection(conn)
 
-# Run essential startup tasks
-@app.on_event("startup")
-def startup_event():
-    init_db()
-    os.makedirs(STORAGE_ROOT, exist_ok=True)
-
+# ────────────────────────────────────────────
+# Models
+# ────────────────────────────────────────────
 class IngestResponse(BaseModel):
     id: str
     filename: str
@@ -72,22 +91,28 @@ class IngestResponse(BaseModel):
     timestamp: datetime
     preview: str
 
-def cleanup_old_files(days: int = 7):
-    cutoff_time = datetime.utcnow() - timedelta(days=days)
-    for folder in os.listdir(STORAGE_ROOT):
-        folder_path = os.path.join(STORAGE_ROOT, folder)
-        if os.path.isdir(folder_path):
-            try:
-                folder_time = datetime.strptime(folder, "%Y%m%d_%H%M%S")
-                if folder_time < cutoff_time:
-                    shutil.rmtree(folder_path)
-                    logger.info(f"[NOW] Removed old folder: {folder_path}")
-            except ValueError:
-                continue
+class NowSignal(BaseModel):
+    timestamp: datetime
+    source: str
+    content: str
+
+# ────────────────────────────────────────────
+# Routes
+# ────────────────────────────────────────────
+@app.post("/memory/ingest")
+def memory_ingest_fallback(text: str = Body(..., embed=True)):
+    signal = NowSignal(
+        timestamp=datetime.utcnow(),
+        source="frontend",
+        content=text
+    )
+    logger.info("[NOW] Received memory snapshot via /memory/ingest", text=text)
+    publish("now_channel", signal.dict())
+    return {"status": "published", "text": text}
 
 @app.post("/ingest")
 def ingest_signal(signal: NowSignal):
-    logger.info("[NOW] Received signal", signal=signal.dict())
+    logger.info("[NOW] Received NowSignal", signal=signal.dict())
     publish("now_channel", signal.dict())
     return {"status": "published"}
 
@@ -160,7 +185,25 @@ def detailed_healthcheck():
         "timestamp": datetime.utcnow().isoformat()
     }
 
-# Entry point for running directly
+# ────────────────────────────────────────────
+# Background Cleanup
+# ────────────────────────────────────────────
+def cleanup_old_files(days: int = 7):
+    cutoff_time = datetime.utcnow() - timedelta(days=days)
+    for folder in os.listdir(STORAGE_ROOT):
+        folder_path = os.path.join(STORAGE_ROOT, folder)
+        if os.path.isdir(folder_path):
+            try:
+                folder_time = datetime.strptime(folder, "%Y%m%d_%H%M%S")
+                if folder_time < cutoff_time:
+                    shutil.rmtree(folder_path)
+                    logger.info(f"[NOW] Removed old folder: {folder_path}")
+            except ValueError:
+                continue
+
+# ────────────────────────────────────────────
+# Uvicorn Entry (optional for local dev)
+# ────────────────────────────────────────────
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000)

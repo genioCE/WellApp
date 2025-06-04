@@ -84,9 +84,23 @@ def listener():
                     f"[INTERPRET] Published data uuid={uuid} to '{INTERPRET_CHANNEL}'"
                 )
 
+                # ✅ NEW: publish to memory_replay_channel
+                replay_message = {
+                    "uuid": uuid,
+                    "timestamp": downstream_message["timestamp"],
+                    "tokens": tokens,
+                    "weight": 1.0,
+                    "tags": ["interpreted"]
+                }
+                publish("memory_replay_channel", replay_message)
+                logger.info(
+                    f"[INTERPRET] Published replay to 'memory_replay_channel': {replay_message}"
+                )
+
             except Exception as e:
                 interpret_errors.inc()
                 logger.error(f"[INTERPRET] Error processing message: {e}")
+
 
 
 def handle_shutdown(signal_received, frame):

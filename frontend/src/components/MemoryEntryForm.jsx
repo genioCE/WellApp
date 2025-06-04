@@ -1,13 +1,32 @@
 import React, { useState } from 'react';
 
-export default function MemoryEntryForm() {
+export default function MemoryEntryForm({ onIngestComplete }) {
   const [content, setContent] = useState('');
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // TODO: wire to /memory/ingest endpoint
-    console.log('submit', content);
-    setContent('');
+
+    if (!content.trim()) return;
+
+    try {
+      const response = await fetch('http://localhost:8001/memory/ingest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: content }),
+      });
+
+      if (response.ok) {
+        console.log('✅ Memory ingested');
+        setContent('');
+        if (typeof onIngestComplete === 'function') {
+          onIngestComplete(); // 🔁 trigger timeline reload
+        }
+      } else {
+        console.error('❌ Ingest failed:', await response.text());
+      }
+    } catch (err) {
+      console.error('🚨 Network error:', err);
+    }
   };
 
   return (
