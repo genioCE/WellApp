@@ -12,6 +12,8 @@ from prometheus_fastapi_instrumentator import Instrumentator
 
 from shared.schemas import NowSignal
 from shared.redis_utils import publish
+import pandas as pd
+from .scada_utils import row_to_memory
 
 # ────────────────────────────────────────────
 # Configuration Constants
@@ -19,6 +21,7 @@ from shared.redis_utils import publish
 ALLOWED_EXTENSIONS = {'.txt', '.md', '.json'}
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
 STORAGE_ROOT = '/tmp/ingested_files'
+EXPRESS_CHANNEL = os.getenv('EXPRESS_CHANNEL', 'express_channel')
 
 # ────────────────────────────────────────────
 # FastAPI App Setup
@@ -168,6 +171,35 @@ async def ingest_file(file: UploadFile = File(...), background_tasks: Background
         timestamp=ts,
         preview=preview
     )
+
+
+@app.post("/ingest/scada")
+async def ingest_scada(file: UploadFile = File(...)):
+    """Ingest SCADA CSV data and publish each row to the EXPRESS channel."""
+    if not file.filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="CSV file required")
+
+    try:
+        df = pd.read_csv(file.file)
+    except Exception as e:
+        logger.error(f"[SCADA] Failed to parse CSV: {e}")
+        raise HTTPException(status_code=400, detail="Invalid CSV format")
+
+    rows_ingested = 0
+    errors: list[str] = []
+    for idx, row in df.iterrows():
+        try:
+            memory = row_to_memory(row)
+            publish(EXPRESS_CHANNEL, memory)
+            rows_ingested += 1
+        except Exception as exc:
+            errors.append(f"row {idx}: {exc}")
+
+    return {
+        "rows_ingested": rows_ingested,
+        "success": len(errors) == 0,
+        "errors": errors,
+    }
 
 @app.get("/health")
 def detailed_healthcheck():

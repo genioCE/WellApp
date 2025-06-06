@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import MemoryTimeline from '../components/MemoryTimeline';
-import MemoryEntryForm from '../components/MemoryEntryForm';
+import IngestPanel from '../components/IngestPanel';
 import LiveFeedDock from '../components/LiveFeedDock';
 import SearchFilterPanel from '../components/SearchFilterPanel';
 import { filterMemories } from '../utils/filterMemories';
@@ -56,7 +56,7 @@ export default function App() {
           onChange={handleFilterChange}
           onClear={handleClearFilters}
         />
-        <MemoryEntryForm onIngestComplete={fetchTimeline} onLog={handleLog} />
+        <IngestPanel onIngestComplete={fetchTimeline} onLog={handleLog} />
       </aside>
       <main className="flex-1 p-4 overflow-y-auto space-y-4">
         <MemoryTimeline data={filteredTimeline} />
