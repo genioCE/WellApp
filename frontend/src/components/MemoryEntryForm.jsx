@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
 
-export default function MemoryEntryForm({ onIngestComplete }) {
+export default function MemoryEntryForm({ onIngestComplete, onLog }) {
   const [content, setContent] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     if (!content.trim()) return;
 
     try {
@@ -16,16 +15,15 @@ export default function MemoryEntryForm({ onIngestComplete }) {
       });
 
       if (response.ok) {
-        console.log('✅ Memory ingested');
+        onLog?.(`[ingest] ${new Date().toLocaleTimeString()} - Memory ingested`);
         setContent('');
-        if (typeof onIngestComplete === 'function') {
-          onIngestComplete(); // 🔁 trigger timeline reload
-        }
+        onIngestComplete?.();
       } else {
-        console.error('❌ Ingest failed:', await response.text());
+        const msg = await response.text();
+        onLog?.(`[error] ${msg}`);
       }
     } catch (err) {
-      console.error('🚨 Network error:', err);
+      onLog?.(`[error] ${err}`);
     }
   };
 
