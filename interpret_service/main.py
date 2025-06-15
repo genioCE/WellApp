@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from shared.redis_utils import subscribe, publish
+from interpret_worker import listen_for_signals
 from shared.logger import logger
 import threading
 import json
@@ -90,7 +91,7 @@ def listener():
                     "timestamp": downstream_message["timestamp"],
                     "tokens": tokens,
                     "weight": 1.0,
-                    "tags": ["interpreted"]
+                    "tags": ["interpreted"],
                 }
                 publish("memory_replay_channel", replay_message)
                 logger.info(
@@ -102,7 +103,6 @@ def listener():
                 logger.error(f"[INTERPRET] Error processing message: {e}")
 
 
-
 def handle_shutdown(signal_received, frame):
     shutdown_flag.set()
 
@@ -110,6 +110,7 @@ def handle_shutdown(signal_received, frame):
 signal.signal(signal.SIGINT, handle_shutdown)
 signal.signal(signal.SIGTERM, handle_shutdown)
 threading.Thread(target=listener, daemon=True).start()
+threading.Thread(target=listen_for_signals, daemon=True).start()
 
 
 @app.get("/health")

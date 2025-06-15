@@ -77,6 +77,11 @@ services:
       REDIS_PORT: 6379
       EXPRESS_CHANNEL: "express_channel"
       INTERPRET_CHANNEL: "interpret_channel"
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: user
+      PGPASSWORD: password
+      PGDATABASE: database
     depends_on:
       genio_redis:
         condition: service_started
