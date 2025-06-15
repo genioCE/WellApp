@@ -3,17 +3,30 @@ import re
 import json
 import asyncio
 from datetime import datetime
-from typing import List
+from typing import List, Any, Dict
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+import pandas as pd
+import fitz
+import psycopg2
+from psycopg2.extras import execute_batch
 from sentence_transformers import SentenceTransformer
 from prometheus_fastapi_instrumentator import Instrumentator
 from prometheus_client import Histogram
 from loguru import logger
 import redis.asyncio as redis
 
-from shared.config import REDIS_HOST, REDIS_PORT
+from shared.config import (
+    REDIS_HOST,
+    REDIS_PORT,
+    PGHOST,
+    PGPORT,
+    PGUSER,
+    PGPASSWORD,
+    PGDATABASE,
+)
+from now_ingestor.scada_utils import parse_scada_timestamp
 
 # FastAPI app initialization
 app = FastAPI(title="Genio EXPRESS Semantic Encoding Service")
@@ -37,8 +50,10 @@ MODEL_NAME = os.getenv("MODEL_NAME", "all-MiniLM-L6-v2")
 NOW_CHANNEL = os.getenv("NOW_CHANNEL", "now_channel")
 EXPRESS_CHANNEL = os.getenv("EXPRESS_CHANNEL", "express_channel")
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", "32"))
+INGEST_CHANNEL = os.getenv("INGEST_CHANNEL", "ingest_channel")
+INTERPRET_CHANNEL = os.getenv("INTERPRET_CHANNEL", "interpret_channel")
 
-model = SentenceTransformer(MODEL_NAME)
+model: SentenceTransformer | None = None
 
 
 # Request and Response Schemas
@@ -62,6 +77,7 @@ def preprocess_text(text: str) -> str:
 
 # Batch embedding function
 async def encode_batch(texts: List[str]) -> List[List[float]]:
+    assert model is not None
     loop = asyncio.get_event_loop()
     embeddings = await loop.run_in_executor(None, model.encode, texts)
     return [emb.tolist() for emb in embeddings]
@@ -118,10 +134,215 @@ async def process_batch(batch):
         logger.info("[EXPRESS] Published embedding", uuid=uuid)
 
 
+# -----------------------------------------------------------
+# Ingest worker utilities
+# -----------------------------------------------------------
+def parse_scada_csv(path: str, well_id: str) -> list[Dict[str, Any]]:
+    """Convert a SCADA CSV file into rows for snapshot_scada."""
+
+    df = pd.read_csv(path)
+    df = df.rename(
+        columns={
+            "DateTime": "timestamp",
+            "flow_rate_mcf_day": "flow_rate",
+            "static_pressure_psia": "pressure",
+            "temperature_degF": "temperature",
+            "volume_mcf": "volume",
+        }
+    )
+    if "timestamp" in df:
+        df["timestamp"] = df["timestamp"].apply(parse_scada_timestamp)
+
+    df["well_id"] = well_id
+    df["source_file"] = path
+
+    cols = [
+        "well_id",
+        "timestamp",
+        "flow_rate",
+        "pressure",
+        "temperature",
+        "volume",
+        "source_file",
+    ]
+
+    return df[cols].to_dict("records")
+
+
+def parse_wellfile_pdf(path: str, well_id: str) -> list[Dict[str, Any]]:
+    """Split PDF pages into paragraph rows for snapshot_wellfile."""
+
+    doc = fitz.open(path)
+    rows: list[Dict[str, Any]] = []
+    for page_idx, page in enumerate(doc, start=1):
+        text = page.get_text("text")
+        for para in text.split("\n\n"):
+            para = para.strip()
+            if len(para) >= 15:
+                rows.append(
+                    {
+                        "well_id": well_id,
+                        "page": page_idx,
+                        "text": para,
+                        "source_file": path,
+                    }
+                )
+    doc.close()
+    return rows
+
+
+def init_db() -> None:
+    """Ensure snapshot tables exist."""
+
+    conn = psycopg2.connect(
+        host=PGHOST, port=PGPORT, user=PGUSER, password=PGPASSWORD, dbname=PGDATABASE
+    )
+    with conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS snapshot_scada (
+                    id SERIAL PRIMARY KEY,
+                    well_id UUID NOT NULL,
+                    timestamp TIMESTAMP,
+                    flow_rate REAL,
+                    pressure REAL,
+                    temperature REAL,
+                    volume REAL,
+                    source_file TEXT
+                )
+                """
+            )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS snapshot_wellfile (
+                    id SERIAL PRIMARY KEY,
+                    well_id UUID NOT NULL,
+                    page INT,
+                    text TEXT,
+                    source_file TEXT
+                )
+                """
+            )
+    conn.close()
+
+
+def store_scada_rows(rows: list[Dict[str, Any]]) -> None:
+    """Persist SCADA rows to the database."""
+
+    conn = psycopg2.connect(
+        host=PGHOST, port=PGPORT, user=PGUSER, password=PGPASSWORD, dbname=PGDATABASE
+    )
+    with conn:
+        with conn.cursor() as cur:
+            execute_batch(
+                cur,
+                """
+                INSERT INTO snapshot_scada (
+                    well_id, timestamp, flow_rate, pressure, temperature, volume, source_file
+                ) VALUES (
+                    %(well_id)s, %(timestamp)s, %(flow_rate)s, %(pressure)s, %(temperature)s, %(volume)s, %(source_file)s
+                )
+                """,
+                rows,
+            )
+    conn.close()
+
+
+def store_wellfile_rows(rows: list[Dict[str, Any]]) -> None:
+    """Persist well file rows to the database."""
+
+    conn = psycopg2.connect(
+        host=PGHOST, port=PGPORT, user=PGUSER, password=PGPASSWORD, dbname=PGDATABASE
+    )
+    with conn:
+        with conn.cursor() as cur:
+            execute_batch(
+                cur,
+                """
+                INSERT INTO snapshot_wellfile (
+                    well_id, page, text, source_file
+                ) VALUES (
+                    %(well_id)s, %(page)s, %(text)s, %(source_file)s
+                )
+                """,
+                rows,
+            )
+    conn.close()
+
+
+async def process_scada_event(payload: Dict[str, Any]) -> None:
+    """Handle scada_ingest_ready event."""
+
+    rows = await asyncio.to_thread(
+        parse_scada_csv, payload["file_path"], payload["well_id"]
+    )
+    await asyncio.to_thread(store_scada_rows, rows)
+    await redis_client.publish(
+        INTERPRET_CHANNEL,
+        json.dumps(
+            {
+                "event": "interpret_ready",
+                "well_id": payload["well_id"],
+                "source": "scada",
+            }
+        ),
+    )
+    logger.info("[EXPRESS] Stored SCADA snapshot", well_id=payload["well_id"])
+
+
+async def process_wellfile_event(payload: Dict[str, Any]) -> None:
+    """Handle wellfile_ingest_ready event."""
+
+    rows = await asyncio.to_thread(
+        parse_wellfile_pdf, payload["file_path"], payload["well_id"]
+    )
+    await asyncio.to_thread(store_wellfile_rows, rows)
+    await redis_client.publish(
+        INTERPRET_CHANNEL,
+        json.dumps(
+            {
+                "event": "interpret_ready",
+                "well_id": payload["well_id"],
+                "source": "wellfile",
+            }
+        ),
+    )
+    logger.info("[EXPRESS] Stored WELLFILE snapshot", well_id=payload["well_id"])
+
+
+async def handle_ingest_channel() -> None:
+    """Background worker listening for ingest events."""
+
+    pubsub = redis_client.pubsub()
+    await pubsub.subscribe(INGEST_CHANNEL)
+    logger.info(f"[EXPRESS] Subscribed to Redis channel '{INGEST_CHANNEL}'")
+
+    while True:
+        message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=0.5)
+        if not message:
+            await asyncio.sleep(0.1)
+            continue
+
+        try:
+            payload = json.loads(message["data"])
+            event = payload.get("event")
+            if event == "scada_ingest_ready":
+                await process_scada_event(payload)
+            elif event == "wellfile_ingest_ready":
+                await process_wellfile_event(payload)
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.error(f"[EXPRESS] Error handling ingest event: {exc}")
+
+
 # Startup event: only tasks needing asynchronous context here
 @app.on_event("startup")
 async def startup_event():
+    global model
+    model = SentenceTransformer(MODEL_NAME)
+    init_db()
     asyncio.create_task(handle_now_channel())
+    asyncio.create_task(handle_ingest_channel())
 
 
 # HTTP API endpoint for single embedding generation
@@ -131,6 +352,7 @@ async def encode(req: EncodeRequest):
         logger.warning("[EXPRESS] Empty text received", uuid=req.uuid)
         raise HTTPException(status_code=400, detail="Input text is empty")
 
+    assert model is not None
     cleaned = preprocess_text(req.text)
     with embedding_latency.time():
         loop = asyncio.get_event_loop()
