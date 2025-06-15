@@ -1,0 +1,4 @@
+psycopg2-binary
+redis[hiredis]
+qdrant-client
+sentence-transformers
