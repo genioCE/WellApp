@@ -22,11 +22,10 @@ dummy_st = types.ModuleType("sentence_transformers")
 dummy_st.SentenceTransformer = lambda *args, **kwargs: DummyModel()
 sys.modules["sentence_transformers"] = dummy_st
 
-# Stub pandas for transformers import
-module = types.ModuleType("pandas")
-module.__spec__ = importlib.machinery.ModuleSpec("pandas", loader=None)
-module.Series = dict
-sys.modules["pandas"] = module
+
+dummy_psycopg2 = types.ModuleType("psycopg2")
+dummy_psycopg2.extensions = types.SimpleNamespace(connection=object, cursor=object)
+sys.modules["psycopg2"] = dummy_psycopg2
 
 from truth_service.main import embed_text
 

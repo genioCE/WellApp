@@ -4,6 +4,10 @@ import sys
 import types
 import importlib
 
+dummy_psycopg2 = types.ModuleType("psycopg2")
+dummy_psycopg2.extensions = types.SimpleNamespace(connection=object)
+sys.modules["psycopg2"] = dummy_psycopg2
+
 if isinstance(sys.modules.get("pandas"), types.SimpleNamespace):
     del sys.modules["pandas"]
 pd = importlib.import_module("pandas")
