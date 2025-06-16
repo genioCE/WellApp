@@ -7,11 +7,19 @@ import json
 import spacy
 import os
 from datetime import datetime
-from schemas import PruneRequest, PruneResponse
+from typing import List
+from schemas import (
+    PruneRequest,
+    PruneResponse,
+    InterpretRequest,
+    InterpretResponseLine,
+    SnapshotLine,
+)
 from pruning import prune_embedding
 from loguru import logger
 from prometheus_fastapi_instrumentator import Instrumentator
 from prometheus_client import Histogram, Counter
+import openai
 import signal
 import uvicorn
 
@@ -38,6 +46,9 @@ THRESHOLD = float(os.getenv("PRUNE_THRESHOLD", "0.1"))
 REDUCE_DIM = int(os.getenv("REDUCE_DIM", "0"))
 EXPRESS_CHANNEL = os.getenv("EXPRESS_CHANNEL", "express_channel")
 INTERPRET_CHANNEL = os.getenv("INTERPRET_CHANNEL", "interpret_channel")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+SKIP_THREADS = os.getenv("INTERPRET_SKIP_THREADS") == "1"
 
 shutdown_flag = threading.Event()
 
@@ -109,8 +120,9 @@ def handle_shutdown(signal_received, frame):
 
 signal.signal(signal.SIGINT, handle_shutdown)
 signal.signal(signal.SIGTERM, handle_shutdown)
-threading.Thread(target=listener, daemon=True).start()
-threading.Thread(target=listen_for_signals, daemon=True).start()
+if not SKIP_THREADS:
+    threading.Thread(target=listener, daemon=True).start()
+    threading.Thread(target=listen_for_signals, daemon=True).start()
 
 
 @app.get("/health")
@@ -152,6 +164,66 @@ async def prune(req: PruneRequest):
         timestamp=datetime.utcnow(),
         details=details,
     )
+
+
+def _chunks(items: List[str], size: int = 10) -> List[List[str]]:
+    """Return items in consecutive batches."""
+
+    return [items[i : i + size] for i in range(0, len(items), size)]
+
+
+def extract_svo(lines: List[SnapshotLine]) -> List[dict]:
+    """Call GPT-4o to parse sentences into subject, verb, object, and tags."""
+
+    if not OPENAI_API_KEY:
+        raise HTTPException(status_code=500, detail="OpenAI API key not configured")
+    openai.api_key = OPENAI_API_KEY
+    sentences = [l.sentence for l in lines]
+    results: List[dict] = []
+    for batch in _chunks(sentences):
+        prompt = (
+            "For each numbered sentence, return JSON with subject, verb, object, "
+            "and a short list of tags. Respond with a JSON array in the same order."\
+            "\n" + "\n".join(f"{i+1}. {s}" for i, s in enumerate(batch))
+        )
+        try:
+            resp = openai.ChatCompletion.create(
+                model=OPENAI_MODEL, messages=[{"role": "user", "content": prompt}]
+            )
+            data = json.loads(resp.choices[0].message["content"])
+        except Exception as e:  # pragma: no cover - network issues
+            interpret_errors.inc()
+            logger.error(f"[INTERPRET] GPT extraction failed: {e}")
+            data = [{} for _ in batch]
+        if not isinstance(data, list):
+            data = [{} for _ in batch]
+        results.extend(data)
+    return results
+
+
+@app.post("/interpret", response_model=List[InterpretResponseLine])
+async def interpret(req: InterpretRequest) -> List[InterpretResponseLine]:
+    """Return subject, verb, object, and tags for each sentence."""
+
+    if not req.lines:
+        raise HTTPException(status_code=400, detail="No lines provided")
+
+    parsed = extract_svo(req.lines)
+    enriched: List[InterpretResponseLine] = []
+    for line, info in zip(req.lines, parsed):
+        enriched.append(
+            InterpretResponseLine(
+                sentence=line.sentence,
+                timestamp=line.timestamp,
+                source=line.source,
+                well_id=line.well_id,
+                subject=info.get("subject"),
+                verb=info.get("verb"),
+                object=info.get("object"),
+                tags=info.get("tags", []),
+            )
+        )
+    return enriched
 
 
 if __name__ == "__main__":

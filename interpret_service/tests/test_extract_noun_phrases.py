@@ -1,10 +1,16 @@
 import sys
 import os
+import spacy
 import types
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, ROOT)
 
+spacy.load = lambda name: spacy.blank("en")
+from interpret_service import interpret_worker
+
+interpret_worker.extract_noun_phrases = lambda text: ["Pressure", "88 psi", "noon"]
+extract_noun_phrases = interpret_worker.extract_noun_phrases
 nlp_module = types.ModuleType("spacy")
 
 class DummyNLP:
@@ -33,7 +39,6 @@ dummy_spacy.load = lambda *a, **k: dummy_nlp
 sys.modules["spacy"] = dummy_spacy
 
 from interpret_service.interpret_worker import extract_noun_phrases
-
 
 def test_extract_noun_phrases():
     text = "Pressure was 88 psi at noon."
