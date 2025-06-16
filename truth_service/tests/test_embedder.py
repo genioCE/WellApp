@@ -41,7 +41,18 @@ def reload_truth():
     if "truth_service.main" in sys.modules:
         del sys.modules["truth_service.main"]
     return importlib.import_module("truth_service.main")
+# Stub psycopg2 to avoid postgres dependency
+dummy_psycopg2 = types.ModuleType("psycopg2")
+dummy_psycopg2.extensions = types.SimpleNamespace(cursor=object, connection=object)
+sys.modules["psycopg2"] = dummy_psycopg2
 
+# Stub psycopg2 extensions
+dummy_pg = types.ModuleType("psycopg2")
+dummy_pg.extensions = types.SimpleNamespace(cursor=object, connection=object)
+sys.modules["psycopg2"] = dummy_pg
+
+from truth_service.main import embed_text
+sys.modules.pop("pandas", None)
 
 def test_embed_text_dimension():
     mod = reload_truth()
