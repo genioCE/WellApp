@@ -7,3 +7,5 @@ prometheus-fastapi-instrumentator
 pandas
 PyMuPDF
 psycopg2-binary
+httpx
+paddleocr

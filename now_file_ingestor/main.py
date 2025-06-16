@@ -1,104 +1,68 @@
 from __future__ import annotations
 
+import json
 import os
-import uuid
-from typing import List
+from datetime import datetime
+from typing import Optional
 
-import asyncpg
-import pandas as pd
-from fastapi import FastAPI, File, HTTPException, UploadFile
+import redis
+import requests
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from loguru import logger
 from prometheus_fastapi_instrumentator import Instrumentator
 
-from .utils import parse_scada_csv, validate_hourly_sequence
+from .utils import classify_filename, generate_file_path
 
 app = FastAPI(title="Genio NOW File Ingestor")
 Instrumentator().instrument(app).expose(app)
 
-PGHOST = os.getenv("PGHOST", "postgres")
-PGPORT = int(os.getenv("PGPORT", "5432"))
-PGUSER = os.getenv("PGUSER", "user")
-PGPASSWORD = os.getenv("PGPASSWORD", "password")
-PGDATABASE = os.getenv("PGDATABASE", "database")
-JZ_WELL_ID = os.getenv("JZ_WELL_ID", "11111111-1111-1111-1111-111111111111")
+REDIS_HOST = os.getenv("REDIS_HOST", "genio_redis")
+REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
+RAW_DATA_ROOT = os.getenv("RAW_DATA_ROOT", "/mnt/data/raw")
+MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", 50)) * 1024 * 1024
+REDIS_CHANNEL = os.getenv("FILE_CHANNEL", "file_ingest")
+EXPRESS_EMITTER_URL = os.getenv("EXPRESS_EMITTER_URL")
 
-pool: asyncpg.Pool | None = None
+redis_client: Optional[redis.Redis] = None
 
 
 @app.on_event("startup")
-async def startup() -> None:
-    global pool
-    pool = await asyncpg.create_pool(
-        host=PGHOST,
-        port=PGPORT,
-        user=PGUSER,
-        password=PGPASSWORD,
-        database=PGDATABASE,
-    )
-    async with pool.acquire() as conn:
-        await conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS scada_records (
-                id SERIAL PRIMARY KEY,
-                well_id UUID NOT NULL,
-                timestamp TIMESTAMPTZ NOT NULL,
-                flow_rate DOUBLE PRECISION,
-                pressure DOUBLE PRECISION,
-                temperature DOUBLE PRECISION,
-                volume DOUBLE PRECISION
-            )
-            """
-        )
-    logger.info("[NOW_FILE] Database initialized")
+def startup() -> None:
+    global redis_client
+    redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+    logger.info("[NOW_FILE] Redis connected", host=REDIS_HOST, port=REDIS_PORT)
 
 
-@app.on_event("shutdown")
-async def shutdown() -> None:
-    if pool:
-        await pool.close()
-
-
-@app.post("/ingest/scada")
-async def ingest_scada_csv(file: UploadFile = File(...)) -> dict[str, int]:
-    if not file.filename.lower().endswith(".csv"):
-        raise HTTPException(status_code=400, detail="CSV file required")
-
+@app.post("/ingest")
+async def ingest_file(well_id: str = Form(...), file: UploadFile = File(...)) -> dict:
+    """Store uploaded file and publish an ingestion event."""
+    file_type = classify_filename(file.filename)
     contents = await file.read()
-    try:
-        df = parse_scada_csv(contents)
-    except Exception as exc:  # pragma: no cover - parse errors
-        logger.error(f"[NOW_FILE] Parse error: {exc}")
-        raise HTTPException(status_code=400, detail="Invalid CSV") from exc
+    if len(contents) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="File too large")
 
-    if len(df) != 8772:
-        raise HTTPException(status_code=400, detail="Invalid row count")
+    path = generate_file_path(RAW_DATA_ROOT, well_id, file_type, file.filename)
+    with open(path, "wb") as f:
+        f.write(contents)
 
-    validate_hourly_sequence(df["timestamp"])
+    payload = {
+        "well_id": well_id,
+        "file_type": file_type,
+        "file_path": path,
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+    if redis_client:
+        redis_client.publish(REDIS_CHANNEL, json.dumps(payload))
+        logger.info("[NOW_FILE] Published", channel=REDIS_CHANNEL, **payload)
 
-    records: List[tuple] = [
-        (
-            uuid.UUID(JZ_WELL_ID),
-            pd.to_datetime(row.timestamp).to_pydatetime(),
-            float(row.flow_rate),
-            float(row.pressure),
-            float(row.temperature),
-            float(row.volume),
-        )
-        for row in df.itertuples(index=False)
-    ]
+    if EXPRESS_EMITTER_URL:
+        try:
+            requests.post(EXPRESS_EMITTER_URL, json=payload, timeout=5)
+            logger.info("[NOW_FILE] Forwarded to express_emitter", url=EXPRESS_EMITTER_URL)
+        except Exception as exc:  # pragma: no cover - network errors
+            logger.error(f"[NOW_FILE] express_emitter failed: {exc}")
 
-    assert pool is not None
-    async with pool.acquire() as conn:
-        await conn.executemany(
-            """
-            INSERT INTO scada_records (
-                well_id, timestamp, flow_rate, pressure, temperature, volume
-            ) VALUES ($1, $2, $3, $4, $5, $6)
-            """,
-            records,
-        )
-
-    return {"rows_inserted": len(records)}
+    return {"status": "stored", **payload}
 
 
 if __name__ == "__main__":  # pragma: no cover - manual start

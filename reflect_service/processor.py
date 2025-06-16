@@ -1,7 +1,7 @@
 import json
 import os
 import threading
-from typing import List
+from typing import List, Any
 
 import pandas as pd
 import psycopg2
@@ -24,7 +24,7 @@ KEYWORDS = ["lease", "permit", "inspection", "abandonment", "test"]
 stop_event = threading.Event()
 
 
-def get_db_connection() -> psycopg2.extensions.connection:
+def get_db_connection() -> Any:
     """Create a new PostgreSQL connection."""
 
     return psycopg2.connect(
