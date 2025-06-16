@@ -40,7 +40,7 @@ def embed_text(text: str) -> List[float]:
     return model.encode(text).tolist()
 
 
-def fetch_rows(cursor: psycopg2.extensions.cursor, table: str) -> List[Tuple[Any, ...]]:
+def fetch_rows(cursor: Any, table: str) -> List[Tuple[Any, ...]]:
     cursor.execute(
         f"SELECT id, well_id, timestamp, text, noun_phrases, anomaly, source_file FROM {table} WHERE embedded = false LIMIT %s",
         (BATCH_SIZE,),
@@ -48,7 +48,7 @@ def fetch_rows(cursor: psycopg2.extensions.cursor, table: str) -> List[Tuple[Any
     return cursor.fetchall()
 
 
-def fetch_wellfile(cursor: psycopg2.extensions.cursor) -> List[Tuple[Any, ...]]:
+def fetch_wellfile(cursor: Any) -> List[Tuple[Any, ...]]:
     cursor.execute(
         "SELECT id, well_id, page, text, noun_phrases, important, source_file FROM reflected_wellfile WHERE embedded = false LIMIT %s",
         (BATCH_SIZE,),
@@ -56,9 +56,7 @@ def fetch_wellfile(cursor: psycopg2.extensions.cursor) -> List[Tuple[Any, ...]]:
     return cursor.fetchall()
 
 
-def mark_embedded(
-    cursor: psycopg2.extensions.cursor, table: str, ids: List[Any]
-) -> None:
+def mark_embedded(cursor: Any, table: str, ids: List[Any]) -> None:
     cursor.execute(
         f"UPDATE {table} SET embedded = true WHERE id = ANY(%s)",
         (ids,),
@@ -69,7 +67,7 @@ def upsert_points(points: List[PointStruct]) -> None:
     qdrant.upsert(collection_name=QDRANT_COLLECTION, points=points)
 
 
-def embed_reflected_scada(conn: psycopg2.extensions.connection) -> None:
+def embed_reflected_scada(conn: Any) -> None:
     with conn.cursor() as cur:
         rows = fetch_rows(cur, "reflected_scada")
         if not rows:
@@ -104,7 +102,7 @@ def embed_reflected_scada(conn: psycopg2.extensions.connection) -> None:
         )
 
 
-def embed_reflected_wellfile(conn: psycopg2.extensions.connection) -> None:
+def embed_reflected_wellfile(conn: Any) -> None:
     with conn.cursor() as cur:
         rows = fetch_wellfile(cur)
         if not rows:
