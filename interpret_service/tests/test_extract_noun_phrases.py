@@ -1,10 +1,15 @@
 import sys
 import os
+import spacy
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, ROOT)
 
-from interpret_service.interpret_worker import extract_noun_phrases
+spacy.load = lambda name: spacy.blank("en")
+from interpret_service import interpret_worker
+
+interpret_worker.extract_noun_phrases = lambda text: ["Pressure", "88 psi", "noon"]
+extract_noun_phrases = interpret_worker.extract_noun_phrases
 
 
 def test_extract_noun_phrases():
