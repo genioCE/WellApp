@@ -79,3 +79,34 @@ def test_replay_timeline():
     resp = client.get("/replay/timeline", params={"well_id": "w"})
     assert resp.status_code == 200
     assert resp.json()[0]["vector_id"] == "v"
+
+
+def test_chat_endpoint(tmp_path):
+    class Enc:
+        def __init__(self, v):
+            self.v = v
+
+        def tolist(self):
+            return self.v
+
+    main.model = types.SimpleNamespace(encode=lambda x: Enc([0.1]))
+    main.qdrant_client = types.SimpleNamespace(
+        search=lambda **kwargs: [
+            types.SimpleNamespace(payload={"text": "context"}, id="1")
+        ]
+    )
+
+    class Dummy:
+        choices = [types.SimpleNamespace(message={"content": "answer"})]
+
+    main.OPENAI_API_KEY = "test"
+    main.openai = types.SimpleNamespace(
+        ChatCompletion=types.SimpleNamespace(create=lambda **kw: Dummy())
+    )
+
+    resp = client.post(
+        "/chat",
+        json={"well_id": "w", "question": "q", "persona": "operator"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["answer"] == "answer"
