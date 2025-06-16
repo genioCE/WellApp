@@ -8,7 +8,20 @@ import psycopg2
 import redis
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import PointStruct
-from sentence_transformers import SentenceTransformer
+from shared.logger import logger
+
+USE_OPENAI_EMBEDDING = os.getenv("USE_OPENAI_EMBEDDING", "false").lower() == "true"
+
+if USE_OPENAI_EMBEDDING:
+    import openai  # type: ignore
+
+    MODEL_NAME = "text-embedding-3-small"
+    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+else:
+    from sentence_transformers import SentenceTransformer
+
+    MODEL_NAME = os.getenv("MODEL_NAME", "all-MiniLM-L6-v2")
+    model = SentenceTransformer(MODEL_NAME)
 
 
 REDIS_HOST = os.getenv("REDIS_HOST", "genio_redis")
@@ -30,14 +43,24 @@ QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "genio_memory")
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", "100"))
 
 
-model = SentenceTransformer("all-MiniLM-L6-v2")
 redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
 qdrant = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
 
 
 def embed_text(text: str) -> List[float]:
-    """Return 384-dim embedding for provided text."""
-    return model.encode(text).tolist()
+    """Return embedding for provided text using configured model."""
+    if USE_OPENAI_EMBEDDING:
+        openai.api_key = OPENAI_API_KEY
+        try:
+            resp = openai.Embedding.create(model=MODEL_NAME, input=text)
+            vector = resp["data"][0]["embedding"]
+        except Exception as exc:  # pragma: no cover - network issues
+            logger.error("[TRUTH] OpenAI embedding failed: %s", exc)
+            vector = []
+    else:
+        vector = model.encode(text).tolist()
+    logger.info("[TRUTH] Embedded text using %s", MODEL_NAME)
+    return vector
 
 
 def fetch_rows(cursor: Any, table: str) -> List[Tuple[Any, ...]]:
@@ -63,8 +86,28 @@ def mark_embedded(cursor: Any, table: str, ids: List[Any]) -> None:
     )
 
 
-def upsert_points(points: List[PointStruct]) -> None:
-    qdrant.upsert(collection_name=QDRANT_COLLECTION, points=points)
+def upsert_points(points: List[PointStruct]) -> bool:
+    """Insert points into Qdrant and return success flag."""
+    try:
+        qdrant.upsert(collection_name=QDRANT_COLLECTION, points=points)
+        logger.info("[TRUTH] Upserted %d vectors", len(points))
+        return True
+    except Exception as exc:  # pragma: no cover - qdrant may be unavailable
+        logger.error("[TRUTH] Qdrant upsert failed: %s", exc)
+        return False
+
+
+def store_sentence(sentence: str, metadata: Dict[str, Any]) -> str:
+    """Embed a sentence and store it with metadata in Qdrant."""
+    vector = embed_text(sentence)
+    payload = metadata.copy()
+    payload["text"] = sentence
+    payload["loop_stage"] = "truth"
+    uid = str(uuid.uuid4())
+    point = PointStruct(id=uid, vector=vector, payload=payload)
+    success = upsert_points([point])
+    logger.info("[TRUTH] Model=%s insert_success=%s", MODEL_NAME, success)
+    return uid
 
 
 def embed_reflected_scada(conn: Any) -> None:
@@ -91,9 +134,10 @@ def embed_reflected_scada(conn: Any) -> None:
                 PointStruct(id=str(uuid.uuid4()), vector=vector, payload=payload)
             )
             ids.append(row_id)
-        upsert_points(points)
+        success = upsert_points(points)
         mark_embedded(cur, "reflected_scada", ids)
         conn.commit()
+        logger.info("[TRUTH] Insert success=%s for scada", success)
         redis_client.publish(
             EMBED_CHANNEL,
             json.dumps(
@@ -126,9 +170,10 @@ def embed_reflected_wellfile(conn: Any) -> None:
                 PointStruct(id=str(uuid.uuid4()), vector=vector, payload=payload)
             )
             ids.append(row_id)
-        upsert_points(points)
+        success = upsert_points(points)
         mark_embedded(cur, "reflected_wellfile", ids)
         conn.commit()
+        logger.info("[TRUTH] Insert success=%s for wellfile", success)
         redis_client.publish(
             EMBED_CHANNEL,
             json.dumps(
