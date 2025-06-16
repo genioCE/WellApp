@@ -6,6 +6,20 @@ import types
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, ROOT)
 
+import types
+
+dummy_spacy = types.ModuleType("spacy")
+dummy_doc = types.SimpleNamespace(
+    noun_chunks=[
+        types.SimpleNamespace(text="Pressure"),
+        types.SimpleNamespace(text="88 psi"),
+        types.SimpleNamespace(text="noon"),
+    ]
+)
+dummy_spacy.load = lambda *a, **k: lambda text: dummy_doc
+sys.modules["spacy"] = dummy_spacy
+
+from interpret_service.interpret_worker import extract_noun_phrases
 spacy.load = lambda name: spacy.blank("en")
 from interpret_service import interpret_worker
 

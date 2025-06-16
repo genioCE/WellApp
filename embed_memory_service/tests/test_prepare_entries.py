@@ -1,6 +1,12 @@
 import sys
 import os
 from types import SimpleNamespace
+import types
+
+dummy_openai = types.ModuleType("openai")
+dummy_openai.ChatCompletion = types.SimpleNamespace(create=lambda **kw: None)
+dummy_openai.__spec__ = types.SimpleNamespace()
+sys.modules["openai"] = dummy_openai
 
 SERVICE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, SERVICE_DIR)

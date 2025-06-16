@@ -7,6 +7,7 @@ import redis.asyncio as redis
 from prometheus_fastapi_instrumentator import Instrumentator
 from prometheus_client import Histogram, Counter
 from qdrant_client.http import models as qm
+import openai
 import psycopg2
 import uuid
 import asyncio
@@ -32,6 +33,11 @@ redis_pool = redis.ConnectionPool.from_url(
     f"redis://{REDIS_HOST}:{REDIS_PORT}/0", decode_responses=True
 )
 redis_client = redis.Redis(connection_pool=redis_pool)
+
+# OpenAI / GPT settings
+USE_GPT_SUMMARY = os.getenv("USE_GPT_SUMMARY", "false").lower() == "true"
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 # Prometheus metrics
 embed_latency = Histogram("embed_latency_seconds", "Time spent embedding and storing")
@@ -104,6 +110,38 @@ def mark_embedded(ids: list[str]) -> None:
         payload={"loop_stage": "embedded"},
         points=ids,
     )
+
+
+async def gpt_enrich(
+    sentence: str, tags: list[str] | None
+) -> tuple[str, list[str], float]:
+    """Return summary, persona tags, and gravity score via GPT-4o."""
+    tags = tags or []
+    default = (sentence[:60], tags, 0.5)
+    if not USE_GPT_SUMMARY or not OPENAI_API_KEY:
+        return default
+    prompt = (
+        "Summarize the sentence in about 12 words and "
+        "classify persona tags (engineer, operator, etc.) and a gravity_score "
+        "between 0 and 1 as JSON with keys 'summary', 'persona_tags', 'gravity_score'."
+    )
+    try:
+        openai.api_key = OPENAI_API_KEY
+        resp = await asyncio.to_thread(
+            openai.ChatCompletion.create,
+            model=OPENAI_MODEL,
+            messages=[{"role": "user", "content": f"{prompt}\nSentence: {sentence}"}],
+        )
+        content = resp.choices[0].message["content"]
+        data = json.loads(content)
+        return (
+            data.get("summary", default[0]),
+            data.get("persona_tags", default[1]),
+            float(data.get("gravity_score", default[2])),
+        )
+    except Exception as exc:  # pragma: no cover - network issues
+        logger.error(f"[EMBED] GPT enrichment failed: {exc}")
+        return default
 
 
 async def fetch_truth_points(well_id: str) -> list[qm.PointStruct]:
@@ -210,6 +248,12 @@ async def handle_embedding(data):
     metadata = data.get("metadata", {})
     timestamp = datetime.utcnow()
 
+    sentence = metadata.get("sentence") or metadata.get("text", "")
+    summary, persona_tags, gravity = await gpt_enrich(sentence, metadata.get("tags"))
+    metadata["summary"] = summary
+    metadata["persona_tags"] = persona_tags
+    metadata["gravity_score"] = gravity
+
     if not anchored_embedding:
         embed_errors.inc()
         logger.error("[EMBED] Missing anchored_embedding", uuid=uuid)
@@ -223,7 +267,12 @@ async def handle_embedding(data):
         await redis_client.publish(
             EMBED_CHANNEL, json.dumps({"uuid": uuid, "metadata_id": metadata_id})
         )
-        logger.info("[EMBED] Stored and published", uuid=uuid, metadata_id=metadata_id)
+        logger.info(
+            "[EMBED] Stored and published",
+            uuid=uuid,
+            metadata_id=metadata_id,
+            summary=summary,
+        )
     except Exception as e:
         embed_errors.inc()
         logger.error("[EMBED] Error storing embedding", uuid=uuid, error=str(e))

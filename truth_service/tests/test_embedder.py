@@ -30,6 +30,9 @@ dummy_st = types.ModuleType("sentence_transformers")
 dummy_st.SentenceTransformer = lambda *args, **kwargs: DummyModel()
 sys.modules["sentence_transformers"] = dummy_st
 
+dummy_psycopg2 = types.ModuleType("psycopg2")
+dummy_psycopg2.extensions = types.SimpleNamespace(connection=object, cursor=object)
+sys.modules["psycopg2"] = dummy_psycopg2
 # stub pandas for transformers dependency
 module = types.SimpleNamespace()
 module.__spec__ = importlib.machinery.ModuleSpec("pandas", loader=None)
