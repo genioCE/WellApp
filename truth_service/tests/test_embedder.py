@@ -22,13 +22,18 @@ dummy_st = types.ModuleType("sentence_transformers")
 dummy_st.SentenceTransformer = lambda *args, **kwargs: DummyModel()
 sys.modules["sentence_transformers"] = dummy_st
 
-# Stub pandas for transformers import
-module = types.ModuleType("pandas")
-module.__spec__ = importlib.machinery.ModuleSpec("pandas", loader=None)
-module.Series = dict
-sys.modules["pandas"] = module
+# Stub psycopg2 to avoid postgres dependency
+dummy_psycopg2 = types.ModuleType("psycopg2")
+dummy_psycopg2.extensions = types.SimpleNamespace(cursor=object, connection=object)
+sys.modules["psycopg2"] = dummy_psycopg2
+
+# Stub psycopg2 extensions
+dummy_pg = types.ModuleType("psycopg2")
+dummy_pg.extensions = types.SimpleNamespace(cursor=object, connection=object)
+sys.modules["psycopg2"] = dummy_pg
 
 from truth_service.main import embed_text
+sys.modules.pop("pandas", None)
 
 
 def test_embed_text_dimension():

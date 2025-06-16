@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import List, Any, Dict
 
 from fastapi import FastAPI, HTTPException
+import httpx
 from pydantic import BaseModel
 import pandas as pd
 import fitz
@@ -52,6 +53,10 @@ EXPRESS_CHANNEL = os.getenv("EXPRESS_CHANNEL", "express_channel")
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", "32"))
 INGEST_CHANNEL = os.getenv("INGEST_CHANNEL", "ingest_channel")
 INTERPRET_CHANNEL = os.getenv("INTERPRET_CHANNEL", "interpret_channel")
+INTERPRET_SERVICE_URL = os.getenv(
+    "INTERPRET_SERVICE_URL",
+    "http://interpret_service:8000/snapshot",
+)
 
 model: SentenceTransformer | None = None
 
@@ -135,10 +140,23 @@ async def process_batch(batch):
 
 
 # -----------------------------------------------------------
+# Snapshot emission utilities
+# -----------------------------------------------------------
+
+async def post_snapshot(snapshot: Dict[str, Any]) -> None:
+    """Send a snapshot to the interpret service via HTTP."""
+    try:
+        async with httpx.AsyncClient() as client:
+            await client.post(INTERPRET_SERVICE_URL, json=snapshot, timeout=5)
+    except Exception as exc:
+        logger.error(f"[EXPRESS] Failed to POST snapshot: {exc}")
+
+
+# -----------------------------------------------------------
 # Ingest worker utilities
 # -----------------------------------------------------------
-def parse_scada_csv(path: str, well_id: str) -> list[Dict[str, Any]]:
-    """Convert a SCADA CSV file into rows for snapshot_scada."""
+def parse_scada_csv(path: str, well_id: str) -> List[Dict[str, Any]]:
+    """Yield SCADA CSV rows as dictionaries."""
 
     df = pd.read_csv(path)
     df = df.rename(
@@ -166,29 +184,106 @@ def parse_scada_csv(path: str, well_id: str) -> list[Dict[str, Any]]:
         "source_file",
     ]
 
-    return df[cols].to_dict("records")
+    rows = []
+    for row in df[cols].itertuples(index=False):
+        rows.append({
+            "well_id": row.well_id,
+            "timestamp": row.timestamp,
+            "flow_rate": row.flow_rate,
+            "pressure": row.pressure,
+            "temperature": row.temperature,
+            "volume": row.volume,
+            "source_file": row.source_file,
+        })
+    return rows
 
 
-def parse_wellfile_pdf(path: str, well_id: str) -> list[Dict[str, Any]]:
-    """Split PDF pages into paragraph rows for snapshot_wellfile."""
+def parse_wellfile_pdf(path: str, well_id: str) -> List[Dict[str, Any]]:
+    """Return the first sentence from each PDF page."""
+
+    try:
+        import spacy
+    except Exception:  # pragma: no cover - optional dependency
+        spacy = None
+    try:
+        from paddleocr import PaddleOCR
+    except Exception:  # pragma: no cover - optional dependency
+        PaddleOCR = None
+
+    nlp = spacy.load("en_core_web_sm") if spacy else None
+    ocr = PaddleOCR(use_angle_cls=True, lang="en") if PaddleOCR else None
 
     doc = fitz.open(path)
-    rows: list[Dict[str, Any]] = []
+    rows: List[Dict[str, Any]] = []
     for page_idx, page in enumerate(doc, start=1):
-        text = page.get_text("text")
-        for para in text.split("\n\n"):
-            para = para.strip()
-            if len(para) >= 15:
-                rows.append(
-                    {
-                        "well_id": well_id,
-                        "page": page_idx,
-                        "text": para,
-                        "source_file": path,
-                    }
-                )
+        text = page.get_text("text").strip()
+        if not text and ocr:
+            try:
+                pix = page.get_pixmap()
+                result = ocr.ocr(pix.tobytes("png"), cls=True)
+                text = " ".join(r[1][0] for r in result[0]) if result else ""
+            except Exception:
+                text = ""
+
+        sentence = ""
+        if nlp:
+            doc_s = nlp(text)
+            for sent in doc_s.sents:
+                if sent.text.strip():
+                    sentence = sent.text.strip()
+                    break
+        else:
+            if "." in text:
+                sentence = text.split(".", 1)[0].strip() + "."
+            else:
+                sentence = text.strip()
+
+        if sentence:
+            rows.append(
+                {
+                    "well_id": well_id,
+                    "page": page_idx,
+                    "text": sentence,
+                    "source_file": path,
+                }
+            )
     doc.close()
     return rows
+
+
+def scada_rows_to_snapshots(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Create snapshots from SCADA rows."""
+
+    snapshots = []
+    for row in rows:
+        sentence = (
+            f"At {row['timestamp']}, flow {row['flow_rate']} mcf/day "
+            f"and pressure {row['pressure']} psi."
+        )
+        snapshots.append(
+            {
+                "sentence": sentence,
+                "timestamp": row["timestamp"],
+                "source": "scada",
+                "well_id": row["well_id"],
+            }
+        )
+    return snapshots
+
+
+def wellfile_rows_to_snapshots(rows: List[Dict[str, Any]], well_id: str) -> List[Dict[str, Any]]:
+    """Create snapshots from wellfile rows."""
+
+    ts = datetime.utcnow().isoformat()
+    return [
+        {
+            "sentence": r["text"],
+            "timestamp": ts,
+            "source": "wellfile",
+            "well_id": well_id,
+        }
+        for r in rows
+    ]
 
 
 def init_db() -> None:
@@ -278,6 +373,13 @@ async def process_scada_event(payload: Dict[str, Any]) -> None:
         parse_scada_csv, payload["file_path"], payload["well_id"]
     )
     await asyncio.to_thread(store_scada_rows, rows)
+
+    snapshots = scada_rows_to_snapshots(rows)
+    count = 0
+    for snap in snapshots:
+        await post_snapshot(snap)
+        count += 1
+
     await redis_client.publish(
         INTERPRET_CHANNEL,
         json.dumps(
@@ -288,7 +390,9 @@ async def process_scada_event(payload: Dict[str, Any]) -> None:
             }
         ),
     )
-    logger.info("[EXPRESS] Stored SCADA snapshot", well_id=payload["well_id"])
+    logger.info(
+        "[EXPRESS] Stored SCADA snapshot", well_id=payload["well_id"], count=count
+    )
 
 
 async def process_wellfile_event(payload: Dict[str, Any]) -> None:
@@ -298,6 +402,13 @@ async def process_wellfile_event(payload: Dict[str, Any]) -> None:
         parse_wellfile_pdf, payload["file_path"], payload["well_id"]
     )
     await asyncio.to_thread(store_wellfile_rows, rows)
+
+    snapshots = wellfile_rows_to_snapshots(rows, payload["well_id"])
+    count = 0
+    for snap in snapshots:
+        await post_snapshot(snap)
+        count += 1
+
     await redis_client.publish(
         INTERPRET_CHANNEL,
         json.dumps(
@@ -308,7 +419,9 @@ async def process_wellfile_event(payload: Dict[str, Any]) -> None:
             }
         ),
     )
-    logger.info("[EXPRESS] Stored WELLFILE snapshot", well_id=payload["well_id"])
+    logger.info(
+        "[EXPRESS] Stored WELLFILE snapshot", well_id=payload["well_id"], count=count
+    )
 
 
 async def handle_ingest_channel() -> None:

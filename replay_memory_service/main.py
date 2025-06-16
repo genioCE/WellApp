@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from pydantic import BaseModel
 from shared.redis_utils import subscribe, publish
 from shared.logger import logger
 from shared.config import (
@@ -18,6 +19,7 @@ import asyncpg
 from sentence_transformers import SentenceTransformer
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import Filter, FieldCondition, MatchValue
+import openai
 
 app = FastAPI()
 
@@ -26,10 +28,22 @@ model = SentenceTransformer(MODEL_NAME)
 qdrant_client = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
 COLLECTION = "genio_memory"
 
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
 DATABASE_URL = f"postgresql://{PGUSER}:{PGPASSWORD}@{PGHOST}:{PGPORT}/{PGDATABASE}"
 pg_pool: asyncpg.Pool | None = None
 
 MEMORY_LOG = "/app/memory_log.jsonl"
+CHAT_LOG = "/app/chat_log.jsonl"
+
+
+class ChatRequest(BaseModel):
+    """Input schema for the /chat endpoint."""
+
+    well_id: str
+    question: str
+    persona: str
 
 
 @app.on_event("startup")
@@ -117,6 +131,77 @@ async def replay_timeline(well_id: str, source: str | None = None):
     async with pg_pool.acquire() as conn:
         rows = await conn.fetch(query, *params)
     return [dict(row) for row in rows]
+
+
+@app.post("/chat")
+async def chat(req: ChatRequest):
+    """Answer a question using memory context and GPT-4o."""
+
+    # Fetch related memory vectors
+    vector = model.encode(req.question).tolist()
+    results = qdrant_client.search(
+        collection_name=COLLECTION,
+        query_vector=vector,
+        limit=20,
+        query_filter=Filter(
+            must=[FieldCondition(key="well_id", match=MatchValue(value=req.well_id))]
+        ),
+    )
+
+    # Aggregate memory until token budget reached (~6k tokens)
+    MAX_TOKENS = 6000
+    tokens = 0
+    context: list[str] = []
+    for r in results:
+        text = r.payload.get("text", "")
+        tcount = len(text.split())
+        if tokens + tcount > MAX_TOKENS:
+            break
+        tokens += tcount
+        context.append(text)
+
+    # Build prompt with persona guidance
+    prompt_lines = [
+        f"You are a helpful {req.persona}.",
+        "Use only the following memory facts to answer.",
+        "If information is missing, say so and suggest the next action.",
+    ]
+    for i, c in enumerate(context):
+        prompt_lines.append(f'Memory {i+1}: "{c}"')
+    prompt_lines.append(f"Question: {req.question}")
+    prompt = "\n".join(prompt_lines)
+
+    openai.api_key = OPENAI_API_KEY
+    completion = openai.ChatCompletion.create(
+        model=OPENAI_MODEL,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    answer = completion.choices[0].message["content"].strip()
+
+    total_tokens = len(prompt.split()) + len(answer.split())
+    cost = total_tokens / 1000 * 0.01
+    logger.info(
+        f"[CHAT] question={req.question} tokens={total_tokens} cost_est=${cost:.4f}"
+    )
+    logger.info(f"[CHAT] answer={answer}")
+
+    try:
+        with open(CHAT_LOG, "a") as f:
+            f.write(
+                json.dumps(
+                    {
+                        "well_id": req.well_id,
+                        "question": req.question,
+                        "answer": answer,
+                        "tokens": total_tokens,
+                    }
+                )
+                + "\n"
+            )
+    except Exception as e:  # pragma: no cover - file may not be writable
+        logger.error(f"[CHAT] failed to log interaction: {e}")
+
+    return {"answer": answer, "tokens": total_tokens, "estimated_cost": cost}
 
 
 @app.get("/")
