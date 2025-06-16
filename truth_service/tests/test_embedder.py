@@ -28,7 +28,13 @@ module.__spec__ = importlib.machinery.ModuleSpec("pandas", loader=None)
 module.Series = dict
 sys.modules["pandas"] = module
 
+# Stub psycopg2 extensions
+dummy_pg = types.ModuleType("psycopg2")
+dummy_pg.extensions = types.SimpleNamespace(cursor=object, connection=object)
+sys.modules["psycopg2"] = dummy_pg
+
 from truth_service.main import embed_text
+sys.modules.pop("pandas", None)
 
 
 def test_embed_text_dimension():

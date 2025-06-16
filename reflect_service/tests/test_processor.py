@@ -8,6 +8,12 @@ if isinstance(sys.modules.get("pandas"), types.SimpleNamespace):
     del sys.modules["pandas"]
 pd = importlib.import_module("pandas")
 
+# Stub psycopg2 for offline testing
+dummy_psycopg2 = types.ModuleType("psycopg2")
+dummy_psycopg2.extras = types.SimpleNamespace(execute_batch=lambda *a, **k: None)
+dummy_psycopg2.extensions = types.SimpleNamespace(connection=object)
+sys.modules["psycopg2"] = dummy_psycopg2
+
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, ROOT)
 
