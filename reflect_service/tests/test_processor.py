@@ -11,6 +11,15 @@ pd = importlib.import_module("pandas")
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, ROOT)
 
+# Stub psycopg2 to avoid postgres dependency
+dummy_psycopg2 = types.ModuleType("psycopg2")
+dummy_psycopg2.connect = lambda *a, **k: None
+dummy_psycopg2.extensions = types.SimpleNamespace(connection=object, cursor=object)
+sys.modules["psycopg2"] = dummy_psycopg2
+sys.modules["psycopg2.extras"] = types.SimpleNamespace(
+    execute_batch=lambda *a, **k: None
+)
+
 from reflect_service.processor import flag_anomalies, contains_keywords, KEYWORDS
 
 
