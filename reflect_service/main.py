@@ -5,6 +5,8 @@ from validation import validate_embedding
 from schemas import AnchorResponse
 import redis.asyncio as redis
 from loguru import logger
+from .processor import listen_for_signals, stop_listener
+import threading
 from prometheus_fastapi_instrumentator import Instrumentator
 from prometheus_client import Histogram, Counter
 import asyncio
@@ -90,11 +92,13 @@ async def listener():
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(listener())
+    threading.Thread(target=listen_for_signals, daemon=True).start()
 
 
 @app.on_event("shutdown")
 async def shutdown_event_trigger():
     shutdown_event.set()
+    stop_listener()
     await redis_client.close()
 
 
