@@ -3,7 +3,7 @@ uvicorn[standard]
 sentence-transformers
 redis[hiredis]
 loguru
-prometheus-fastapi-instrumentator
+prometheus-fastapi-instrumentator>=6.1.0
 pandas
 PyMuPDF
 psycopg2-binary

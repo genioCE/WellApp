@@ -2,3 +2,4 @@ fastapi
 redis
 pydantic
 uvicorn
+sentence-transformers>=2.3.0

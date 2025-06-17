@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y build-essential curl \
 
 COPY requirements.txt /app/
 RUN pip install --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt
+ && pip install --no-cache-dir --retries 5 --timeout 60 --progress-bar off -r requirements.txt
 
 COPY . /app/
 

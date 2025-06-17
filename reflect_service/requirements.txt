@@ -3,7 +3,8 @@ fastapi
 uvicorn[standard]
 redis[asyncio]
 loguru
-prometheus-fastapi-instrumentator
+prometheus-fastapi-instrumentator>=6.1.0
 prometheus-client
 psycopg2-binary
 pandas
+openai>=1.0.0

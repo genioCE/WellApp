@@ -5,7 +5,7 @@ scikit-learn
 fastapi
 uvicorn[standard]
 loguru
-prometheus-fastapi-instrumentator
+prometheus-fastapi-instrumentator>=6.1.0
 prometheus-client
 psycopg2-binary
 openai
