@@ -1,0 +1,10 @@
+# Ignore Python cache
+**/__pycache__/
+*.pyc
+
+# Node modules
+frontend/node_modules/
+
+# build output
+frontend/dist/
+

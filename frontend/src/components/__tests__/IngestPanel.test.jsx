@@ -1,17 +1,20 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import IngestPanel from '../IngestPanel';
+import axios from 'axios';
 
-global.fetch = jest.fn(() => Promise.resolve({ ok: true, json: () => ({ rows_ingested: 1 }) }));
+jest.mock('axios');
 
 describe('IngestPanel', () => {
   it('uploads selected CSV file', async () => {
+    axios.post.mockResolvedValue({ data: {} });
     render(<IngestPanel />);
-    const input = screen.getByTestId('csv-file');
+    fireEvent.change(screen.getByTestId('well-id'), { target: { value: 'w1' } });
+    const input = screen.getByTestId('scada-file');
     const file = new File(['DateTime\n'], 'test.csv', { type: 'text/csv' });
     fireEvent.change(input, { target: { files: [file] } });
-    fireEvent.click(screen.getByText('Upload CSV'));
-    await waitFor(() => expect(fetch).toHaveBeenCalled());
-    expect(fetch.mock.calls[0][0]).toMatch('/ingest/scada');
+    fireEvent.click(screen.getByText('Upload SCADA CSV'));
+    await waitFor(() => expect(axios.post).toHaveBeenCalled());
+    expect(axios.post.mock.calls[0][0]).toMatch('/ingest');
   });
 });
