@@ -67,6 +67,18 @@ Open your browser:
 http://localhost:8007
 ```
 
+### 6. Run the Frontend
+
+The React interface lives in `frontend/`.
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open `http://localhost:5173` to use the upload panel, chat, and timeline UI.
+
 ---
 
 ## 🗃️ Services

@@ -3,6 +3,7 @@ import MemoryTimeline from '../components/MemoryTimeline';
 import IngestPanel from '../components/IngestPanel';
 import LiveFeedDock from '../components/LiveFeedDock';
 import SearchFilterPanel from '../components/SearchFilterPanel';
+import ChatInterface from '../components/ChatInterface';
 import { filterMemories } from '../utils/filterMemories';
 
 export default function App() {
@@ -60,6 +61,7 @@ export default function App() {
       </aside>
       <main className="flex-1 p-4 overflow-y-auto space-y-4">
         <MemoryTimeline data={filteredTimeline} />
+        <ChatInterface />
       </main>
       <div className="md:w-1/5 border-l border-gray-700 p-4 flex flex-col">
         <LiveFeedDock messages={feedMessages} memories={timelineData} />

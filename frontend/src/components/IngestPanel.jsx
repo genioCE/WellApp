@@ -1,57 +1,84 @@
 import React, { useState } from 'react';
+import axios from 'axios';
 import MemoryEntryForm from './MemoryEntryForm';
 
 export default function IngestPanel({ onIngestComplete, onLog }) {
-  const [file, setFile] = useState(null);
-  const [rows, setRows] = useState(null);
+  const [wellId, setWellId] = useState('');
+  const [scadaFile, setScadaFile] = useState(null);
+  const [pdfFile, setPdfFile] = useState(null);
+  const [status, setStatus] = useState('');
 
-  const handleUpload = async () => {
-    if (!file) return;
+  const uploadFile = async (file) => {
+    if (!file || !wellId) return;
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('well_id', wellId);
     try {
-      const res = await fetch('http://localhost:8001/ingest/scada', {
-        method: 'POST',
-        body: formData,
-      });
-      const data = await res.json();
-      if (res.ok) {
-        onLog?.(`[scada] ${data.rows_ingested} rows ingested`);
-        setRows(data.rows_ingested);
-        onIngestComplete?.();
-      } else {
-        onLog?.(`[error] ${data.errors?.join(', ')}`);
-      }
+      await axios.post('http://localhost:8010/ingest', formData);
+      onLog?.(`[upload] ${file.name} stored`);
+      setStatus('success');
+      onIngestComplete?.();
     } catch (err) {
-      onLog?.(`[error] ${err}`);
+      setStatus('error');
+      onLog?.(`[error] ${err.message}`);
     }
   };
 
   return (
     <div className="space-y-4">
-      <MemoryEntryForm onIngestComplete={onIngestComplete} onLog={onLog} />
+      <input
+        data-testid="well-id"
+        type="text"
+        value={wellId}
+        onChange={(e) => setWellId(e.target.value)}
+        placeholder="Well ID"
+        className="w-full bg-gray-800 border border-gray-700 rounded p-2"
+      />
       <div className="space-y-2">
         <input
-          data-testid="csv-file"
+          data-testid="scada-file"
           type="file"
           accept=".csv"
-          onChange={(e) => setFile(e.target.files[0])}
+          onChange={(e) => setScadaFile(e.target.files[0])}
           className="text-sm"
         />
-        {file && (
-          <div className="text-xs text-gray-300">{file.name}</div>
+        {scadaFile && (
+          <div className="text-xs text-gray-300">{scadaFile.name}</div>
         )}
         <button
-          onClick={handleUpload}
-          disabled={!file}
+          onClick={() => uploadFile(scadaFile)}
+          disabled={!scadaFile || !wellId}
           className="w-full bg-green-600 hover:bg-green-700 text-white p-2 rounded"
         >
-          Upload CSV
+          Upload SCADA CSV
         </button>
-        {rows !== null && (
-          <div className="text-xs">Rows processed: {rows}</div>
-        )}
       </div>
+      <div className="space-y-2">
+        <input
+          data-testid="pdf-file"
+          type="file"
+          accept=".pdf"
+          onChange={(e) => setPdfFile(e.target.files[0])}
+          className="text-sm"
+        />
+        {pdfFile && (
+          <div className="text-xs text-gray-300">{pdfFile.name}</div>
+        )}
+        <button
+          onClick={() => uploadFile(pdfFile)}
+          disabled={!pdfFile || !wellId}
+          className="w-full bg-green-600 hover:bg-green-700 text-white p-2 rounded"
+        >
+          Upload Wellfile PDF
+        </button>
+      </div>
+      {status === 'success' && (
+        <div className="text-xs text-green-400">Upload successful</div>
+      )}
+      {status === 'error' && (
+        <div className="text-xs text-red-400">Upload failed</div>
+      )}
+      <MemoryEntryForm onIngestComplete={onIngestComplete} onLog={onLog} />
     </div>
   );
 }
