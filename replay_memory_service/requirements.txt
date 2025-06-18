@@ -4,7 +4,7 @@ redis
 pydantic
 uvicorn
 huggingface_hub==0.14.1
-sentence-transformers==2.2.2
+sentence-transformers>=2.3.0,<3.0.0
 tokenizers==0.13.3 --only-binary=:all:
 qdrant-client==1.6.1
 openai==1.14.3
