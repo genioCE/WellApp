@@ -8,12 +8,20 @@ from typing import Optional
 import redis
 import requests
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from .utils import classify_filename, generate_file_path
 
 app = FastAPI(title="Genio NOW File Ingestor")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # update for specific domains in production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 Instrumentator().instrument(app).expose(app)
 
 REDIS_HOST = os.getenv("REDIS_HOST", "genio_redis")
