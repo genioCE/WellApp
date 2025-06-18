@@ -5,7 +5,7 @@ from validation import validate_embedding
 from schemas import AnchorResponse
 import redis.asyncio as redis
 from loguru import logger
-from .processor import listen_for_signals, stop_listener
+from processor import listen_for_signals, stop_listener
 import threading
 from prometheus_fastapi_instrumentator import Instrumentator
 from prometheus_client import Histogram, Counter

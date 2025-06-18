@@ -21,7 +21,7 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from shared.schemas import NowSignal
 from shared.redis_utils import publish
 import pandas as pd
-from scada_utils import row_to_memory
+from shared.scada_utils import row_to_memory
 
 # ────────────────────────────────────────────
 # Configuration Constants

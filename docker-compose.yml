@@ -58,10 +58,11 @@ services:
     ports:
       - "8002:8000"
     environment:
-      REDIS_HOST: genio_redis
-      REDIS_PORT: 6379
-      NOW_CHANNEL: "now_channel"
-      EXPRESS_CHANNEL: "express_channel"
+      - PYTHONPATH=/app:/app/shared
+      - REDIS_HOST=genio_redis
+      - REDIS_PORT=6379
+      - NOW_CHANNEL=now_channel
+      - EXPRESS_CHANNEL=express_channel
     depends_on:
       genio_redis:
         condition: service_started

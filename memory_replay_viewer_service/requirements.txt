@@ -3,3 +3,5 @@ redis
 pydantic
 uvicorn
 sentence-transformers>=2.3.0
+qdrant-client==1.6.1
+openai==1.14.3

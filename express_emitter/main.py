@@ -27,7 +27,10 @@ from shared.config import (
     PGPASSWORD,
     PGDATABASE,
 )
-from ..now_ingestor.scada_utils import parse_scada_timestamp
+
+
+from shared.scada_utils import parse_scada_timestamp
+
 
 # FastAPI app initialization
 app = FastAPI(title="Genio EXPRESS Semantic Encoding Service")

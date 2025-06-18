@@ -3,7 +3,7 @@ FROM python:3.11-slim
 # Set environment and working directory
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-ENV PYTHONPATH=/app
+ENV PYTHONPATH="/app:/app/now_ingestor"
 WORKDIR /app
 
 # Install essential system dependencies
