@@ -6,5 +6,8 @@ uvicorn
 huggingface_hub>=0.16.4,<1.0
 sentence-transformers>=2.3.0,<3.0.0
 tokenizers==0.21.1 --only-binary=tokenizers
+huggingface_hub==0.14.1
+sentence-transformers==2.2.2
+tokenizers==0.13.3
 qdrant-client==1.6.1
 openai==1.88.0
